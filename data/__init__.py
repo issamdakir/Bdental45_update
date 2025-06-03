@@ -184,7 +184,8 @@ class BDENTAL_OT_checkUpdate(bpy.types.Operator):
             BDENTAL_GpuDrawText(message_list=["Preparing update..."])
             addon_update_preinstall(update_root)
             add_bdental_libray()
-            BDENTAL_GpuDrawText(message_list=["Please restart blender to finalize Bdental update."], rect_color=BdentalColors.green)
+            message = ["Please restart blender to finalize Bdental update."]
+            BDENTAL_GpuDrawText(message_list=message, rect_color=BdentalColors.green)
             return {'FINISHED'}
         return {'RUNNING_MODAL'}
         
@@ -213,7 +214,7 @@ class BDENTAL_OT_checkUpdate(bpy.types.Operator):
             txt_list = ["Bdental is up to date."]
             bdental_log(txt_list)
             BDENTAL_GpuDrawText(message_list=txt_list, rect_color=BdentalColors.green, sleep_time=2)
-            return{"CANCELLED"}
+            return{"FINISHED"}
         
         txt_list = [f"Current version = {addon_version}, New version = {update_version}",
                     "<ENTER> : to install last update / <ESC> : to cancel"]

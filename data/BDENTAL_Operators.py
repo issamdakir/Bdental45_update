@@ -113,6 +113,7 @@ from .BDENTAL_Utils import (
     threshold_rgba,
     create_blender_mesh_from_marching_cubes_fast,
     remove_all_pointer_child_of,
+    translate_local,
 
     on_voxel_vizualisation_object_select,
 )
@@ -2940,6 +2941,10 @@ class BDENTAL_OT_LockObjectToPointer(bpy.types.Operator):
             obj for obj in context.scene.objects if \
             obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.SLICES_POINTER_TYPE
             ][0]
+        
+        hide_collection(False, BdentalConstants.SLICES_POINTER_COLLECTION_NAME)
+        hide_object(False, slices_pointer)
+
         child_constraint = obj.constraints.new("CHILD_OF")
         child_constraint.target = slices_pointer
         child_constraint.use_scale_x = False
@@ -2977,6 +2982,7 @@ class BDENTAL_OT_UnlockObjectFromPointer(bpy.types.Operator):
         return True
 
     def execute(self, context):
+        
         obj = context.object
         previous_active_mat_name = obj.get(BdentalConstants.PREVIOUS_ACTIVE_MAT_NAME_TAG)
         
@@ -2987,6 +2993,11 @@ class BDENTAL_OT_UnlockObjectFromPointer(bpy.types.Operator):
 
         slices_pointer = [
             obj for obj in context.scene.objects if  obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.SLICES_POINTER_TYPE][0]
+        hide_collection(False, BdentalConstants.SLICES_POINTER_COLLECTION_NAME)
+        hide_object(False, slices_pointer)
+        
+        
+
         for c in context.object.constraints:
             if c.type == "CHILD_OF" and c.target == slices_pointer:
                 bpy.ops.constraint.apply(constraint=c.name)
@@ -3086,6 +3097,9 @@ class BDENTAL_OT_PointerToImplant(bpy.types.Operator):
         obj = context.object
         slices_pointer = [
             o for o in context.scene.objects if  o.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.SLICES_POINTER_TYPE][0]
+        hide_collection(False, BdentalConstants.SLICES_POINTER_COLLECTION_NAME)
+        hide_object(False, slices_pointer)
+        
         for o in context.scene.objects :
             if o.get(BdentalConstants.BDENTAL_TYPE_TAG) in (BdentalConstants.SLICE_PLANE_TYPE, BdentalConstants.SLICES_POINTER_TYPE) :
                 continue
@@ -3128,6 +3142,8 @@ class BDENTAL_OT_PointerToActive(bpy.types.Operator):
             return {"CANCELLED"}
         
         slices_pointer = slices_pointer_check_list[0]
+        hide_collection(False, BdentalConstants.SLICES_POINTER_COLLECTION_NAME)
+        hide_object(False, slices_pointer)
         
         obj = context.object
         # Move pointer to implant
@@ -3246,6 +3262,7 @@ class BDENTAL_OT_FlyToImplantOrFixingSleeve(bpy.types.Operator):
         slices_pointer_check_list = [
             obj for obj in context.scene.objects if  obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.SLICES_POINTER_TYPE]
         slices_pointer = slices_pointer_check_list[0]
+        hide_collection(False, BdentalConstants.SLICES_POINTER_COLLECTION_NAME)
         hide_object(False, slices_pointer)
 
         target_object_type = context.object.get(BdentalConstants.BDENTAL_TYPE_TAG)
@@ -4112,12 +4129,14 @@ class BDENTAL_OT_SplintGuideGeom(bpy.types.Operator):
         elif event.type == "RET" and self.counter == 2:
             if event.value == ("PRESS"):
 
-                message = ["Guide Splint Remeshing ..."]
-                BDENTAL_GpuDrawText(message)
                 context.view_layer.objects.active = self.splint
                 bpy.ops.object.mode_set(mode="OBJECT")
                 bpy.ops.object.select_all(action="DESELECT")
                 self.splint.select_set(True)
+
+                message = ["Guide Splint Remeshing ..."]
+                BDENTAL_GpuDrawText(message)
+
                 remesh = self.splint.modifiers.new(
                     name="Remesh", type="REMESH")
                 remesh.voxel_size = 0.3
@@ -4139,15 +4158,14 @@ class BDENTAL_OT_SplintGuideGeom(bpy.types.Operator):
                 self.splint(context)
                 area3D, space3D , region_3d = CtxOverride(context)
                 with bpy.context.temp_override(area= area3D, space_data=space3D, region = region_3d):
-                    bpy.ops.object.mode_set(mode='SCULPT')
-                    bpy.ops.wm.tool_set_by_id(name="builtin_brush.Smooth")
-
-                # Set the active brush to Smooth
-                # bpy.context.tool_settings.sculpt.brush = bpy.data.brushes['Smooth']
-
-                # Optionally, set the brush strength (default is 0.5)
-                    bpy.context.tool_settings.sculpt.brush.strength = 0.8
-
+                    bpy.ops.object.mode_set(mode="SCULPT")
+                    bpy.ops.brush.asset_activate(
+                        asset_library_type='ESSENTIALS',
+                        asset_library_identifier="",
+                        relative_asset_identifier="brushes/essentials_brushes-mesh_sculpt.blend/Brush/Smooth")
+                    brush = bpy.data.brushes['Smooth']
+                    brush.strength = 0.5
+                
                 message = [
                     f"(Optional) : Please smooth Guide Splint and press ENTER ..."]
                 BDENTAL_GpuDrawText(message)
@@ -4825,14 +4843,14 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
         name="Guide Component",
         description="Guide Component",
         items=set_enum_items(
-            ["Cube", "Sphere", "Cylinder", "3D Text"]),
-        default="Cube",
+            ["Guide Sleeve Cutter","Cube", "Sphere", "Cylinder", "3D Text"]),
+        default="Guide Sleeve Cutter",
     ) # type: ignore
     component_type: EnumProperty(
         name="Component Type",
         description="Component Type",
         items=set_enum_items(["ADD", "CUT"]),
-        default="ADD",
+        default="CUT",
     ) # type: ignore
     component_size: FloatProperty(
         description="Component Size", default=2, step=1, precision=2
@@ -4841,9 +4859,9 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "guide_component")
-        if self.guide_component == "3D Text":
+        if self.guide_component in ["3D Text"]:
             layout.prop(self, "component_type")
-        if self.guide_component in ["Cube", "Sphere", "Cylinder"]:
+        elif self.guide_component in ["Cube", "Sphere", "Cylinder"]:
             layout.prop(self, "component_type")
             layout.prop(self, "component_size")
         
@@ -4946,8 +4964,73 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
         else:
             self.report({"WARNING"}, "Active space must be a View3d")
             return {"CANCELLED"}
+    
+    def add_guide_sleeve_cutters(self,context,sleeves):
+        for sleeve in sleeves :
+            context.scene.cursor.location = [0,0,0]
+            bpy.ops.object.select_all(action='DESELECT')
+            # context.view_layer.objects.active = sleeve
+            # sleeve.select_set(True)
+            _radius = sleeve.dimensions.x/2 + 1
+            _depth=sleeve.dimensions.z
+            z_trans = _depth-0.01
+            mtx = sleeve.matrix_world.copy()
 
+            bpy.ops.mesh.primitive_cylinder_add(vertices=64, radius=_radius, depth=_depth)
+            sleeve_cutter = context.object
+            sleeve_cutter.location.z = _depth/2
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+            
+            # bpy.ops.object.origin_set(type='ORIGIN_CURSOR', center='MEDIAN')
+
+            # sleeve_cutter.dimensions = sleeve.dimensions
+            sleeve_cutter.matrix_world = mtx
+
+            # bpy.ops.object.duplicate_move()
+
+            # sleeve_cutter = context.object
+            # bpy.ops.object.parent_clear(type='CLEAR_KEEP_TRANSFORM')
+
+            # sleeve_cutter.scale.x *=2
+            # sleeve_cutte_depthr.scale.y *=2
+            
+            bpy.ops.transform.translate(value=(0, 0, z_trans), orient_type='LOCAL', constraint_axis=(False, False, True))
+            # translate_local(sleeve_cutter, z_trans, "Z")
+            sleeve_cutter.lock_location = (True, True, True)
+            name = sleeve.name.split("_ADD_")[-1]
+            sleeve_cutter.name = f"{name}_cutter"
+            mat_cut = bpy.data.materials.get(
+            "mat_component_cut") or bpy.data.materials.new(name="mat_component_cut")
+            mat_cut.diffuse_color = [1.0, 0.0, 0.0, 1.0]
+            mat_cut.use_nodes = True
+            nodes = mat_cut.node_tree.nodes
+            bsdf_node = [n for n in nodes if n.type =='BSDF_PRINCIPLED'][0]
+            bsdf_node.inputs[0].default_value = [1.0, 0.0, 0.0, 1.0]
+            sleeve_cutter.active_material = mat_cut
+            MoveToCollection(sleeve_cutter, BdentalConstants.GUIDE_COMPONENTS_COLLECTION_NAME)
+
+        bpy.ops.object.select_all(action='DESELECT')
+
+        return
     def execute(self, context):
+        if self.guide_component == "3D Text" and (not context.object or not context.object.select_get()):
+            message = [
+            "Please Select target object and retry"]
+            BDENTAL_GpuDrawText(message_list=message, rect_color=BdentalColors.red, sleep_time=2)
+            return {"CANCELLED"}
+        elif self.guide_component == "Guide Sleeve Cutter":
+            sleeves = [obj for obj in context.selected_objects if obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.IMPLANT_SLEEVE_TYPE]
+            if not sleeves or not context.object in sleeves:
+                message = [
+                "Please Select guide sleeve(s)."]
+                BDENTAL_GpuDrawText(message_list=message, rect_color=BdentalColors.red, sleep_time=2)
+                return {"CANCELLED"}
+            else :
+                bpy.ops.object.mode_set(mode="OBJECT")
+                self.add_guide_sleeve_cutters(context, sleeves)
+                return {'FINISHED'}
+            
         self.mat_add = bpy.data.materials.get(
             "mat_component_add") or bpy.data.materials.new(name="mat_component_add")
         self.mat_add.diffuse_color = [0.0, 1.0, 0.0, 1.0]
@@ -4963,13 +5046,7 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
         #     self.preffix = ""
         
         
-        if self.guide_component == "3D Text" and (not context.object or not context.object.select_get()):
-            message = [
-            "Please Select target object and retry"]
-            BDENTAL_GpuDrawText(message_list=message, rect_color=BdentalColors.red)
-            sleep(3)
-            BDENTAL_GpuDrawText()
-            return {"CANCELLED"}
+        
         
         message = [
         "Please left click to set the component position", "<ENTER> to confirm  <ESC> to cancell"]
@@ -5909,7 +5986,7 @@ class BDENTAL_OT_BlockoutNew(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        if not context.object and context.object.select_get():
+        if not context.object or not context.object.select_get():
             return False
         return context.object.get("undercuts_vector") and context.object.get("undercuts_view_rotation_mtx")
 

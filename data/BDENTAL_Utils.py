@@ -2059,6 +2059,26 @@ def rotate_local(obj, target, axis, angle):
     obj_local_rot = mat_rot @ obj_local
     obj.matrix_world = target.matrix_world @ obj_local_rot
 
+def translate_local(obj, amount, axis='X'):
+    """
+    Translate the object along its local axis.
+
+    :param obj: The Blender object to move
+    :param amount: The distance to move
+    :param axis: Axis to move along: 'X', 'Y', or 'Z'
+    """
+    axis = axis.upper()
+    if axis not in 'XYZ':
+        raise ValueError("Axis must be 'X', 'Y', or 'Z'")
+
+    # Get local axis direction in world space
+    if axis == "X" : direction = obj.matrix_world.to_3x3().col[0]
+    elif axis == "Y" : direction = obj.matrix_world.to_3x3().col[1]
+    elif axis == "Z" : direction = obj.matrix_world.to_3x3().col[2]
+    # direction = obj.matrix_world.to_3x3()[{'X': 0, 'Y': 1, 'Z': 2}[axis]]
+    
+    # Move object along that direction
+    obj.location += direction * amount
 
 def get_bdental_implant_data_dict(scene_prop):
     bdental_implant_data = {}

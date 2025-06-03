@@ -38,8 +38,8 @@ class BDENTAL_PT_MainPanel(bpy.types.Panel):
         g = box.grid_flow(columns=2, align=True)
         g.operator("wm.bdental_support_telegram")
         g.operator("wm.bdental_remove_info_footer", icon="CANCEL")
-        # g = box.grid_flow(columns=1, align=True)
-        # g.operator("wm.bdental_draw_tester")
+        g = box.grid_flow(columns=1, align=True)
+        g.operator("wm.bdental_draw_tester")
 
         if not bpy.data.filepath:
             r = box.row(align=True)

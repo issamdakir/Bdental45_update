@@ -699,18 +699,22 @@ class BDENTAL_GpuDrawText() :
 
         if self.remove_handlers:
             self._cancell_previous()
-            
+            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1) 
+
         if self.message_list:
             self.gpu_info_footer()
             DRAW_HANDLERS.append(self.info_handler)
-            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP') 
+            bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)  
 
             if self.sleep_time != 0:
                 sleep(self.sleep_time)
                 self._cancell_previous()
-        else :
-            self._cancell_previous()
+                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1) 
+        # else :
+        #     self._cancell_previous()
+        #     bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1) 
 
+        # bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1) 
     def _cancell_previous(self):
         for _h in DRAW_HANDLERS:
             try :
