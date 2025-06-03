@@ -210,9 +210,10 @@ class BDENTAL_OT_checkUpdate(bpy.types.Operator):
             BDENTAL_GpuDrawText(message_list=error_txt_list, rect_color=BdentalColors.red, sleep_time=2)
             return{"CANCELLED"}
         
+        bdental_log([f"Current version = {addon_version}, Remote version = {update_version}"])
         if update_version <= addon_version :
             txt_list = ["Bdental is up to date."]
-            bdental_log(txt_list)
+            
             BDENTAL_GpuDrawText(message_list=txt_list, rect_color=BdentalColors.green, sleep_time=2)
             return{"FINISHED"}
         

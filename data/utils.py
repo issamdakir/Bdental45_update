@@ -99,12 +99,12 @@ class BdentalConstants():
     "fontid" : 0,
     "size" : 14,
     }   
-    REPO_URL = "https://github.com/issamdakir/Bdental4/zipball/main"
-    VERSION_URL = "https://raw.githubusercontent.com/issamdakir/Bdental4/main/Resources/BDENTAL_Version.txt"
-    ADDON_UPDATE_URL = "https://github.com/issamdakir/Bdental4_update/zipball/main"
-    ADDON_UPDATE_NAME = "Bdental_4_update"
+    REPO_URL = "https://github.com/issamdakir/Bdental45/zipball/main"
+    VERSION_URL = "https://raw.githubusercontent.com/issamdakir/Bdental45/main/Resources/BDENTAL_Version.txt"
+    ADDON_UPDATE_URL = "https://github.com/issamdakir/Bdental45_update/zipball/main"
+    ADDON_UPDATE_NAME = "Bdental_45_update"
     UPDATE_MAP_JSON = "update_data_map.json"
-    UPDATE_VERSION_URL = "https://raw.githubusercontent.com/issamdakir/Bdental4_update/main/data/BDENTAL_Version.txt"
+    UPDATE_VERSION_URL = "https://raw.githubusercontent.com/issamdakir/Bdental45_update/main/data/BDENTAL_Version.txt"
     TELEGRAM_LINK = "https://t.me/bdental3"
     REQ_DICT = {
         "SimpleITK": "SimpleITK",
