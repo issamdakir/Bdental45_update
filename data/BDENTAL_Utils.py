@@ -38,20 +38,26 @@ ProgEvent = vtkCommand.ProgressEvent
 _PREFFIX = None
 
 ######################################################################
-def remove_all_pointer_child_of(slices_pointer,exclude=(BdentalConstants.SLICE_PLANE_TYPE, BdentalConstants.SLICES_POINTER_TYPE)):
-    for obj in bpy.context.scene.objects :
-        if obj.get(BdentalConstants.BDENTAL_TYPE_TAG) in exclude :
-            continue
-        cp = [c for c in obj.constraints if c.type ==
-            "CHILD_OF" and c.target == slices_pointer]
-        if cp :
-            try :
-                bpy.ops.object.select_all(action="DESELECT")
-                obj.select_set(True)
-                bpy.context.view_layer.objects.active = obj
-                bpy.ops.wm.bdental_unlock_object_from_pointer()
-            except Exception as e:
-                pass
+def remove_all_pointer_child_of(exclude=(BdentalConstants.SLICE_PLANE_TYPE, BdentalConstants.SLICES_POINTER_TYPE)):
+    slices_pointer_checklist = [
+            obj for obj in bpy.context.scene.objects if \
+            obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.SLICES_POINTER_TYPE
+            ]
+    if slices_pointer_checklist:
+        slices_pointer = slices_pointer_checklist[0]
+        for obj in bpy.context.scene.objects :
+            if obj.get(BdentalConstants.BDENTAL_TYPE_TAG) in exclude :
+                continue
+            cp = [c for c in obj.constraints if c.type ==
+                "CHILD_OF" and c.target == slices_pointer]
+            if cp :
+                try :
+                    bpy.ops.object.select_all(action="DESELECT")
+                    obj.select_set(True)
+                    bpy.context.view_layer.objects.active = obj
+                    bpy.ops.wm.bdental_unlock_object_from_pointer()
+                except Exception as e:
+                    pass
 def create_point_cloud(sitk_image, threshold=600, sample_fraction=1.0,dicom_preffix="", layer_color=(1.0, 1.0, 1.0)):
     """
     Creates a point cloud from SimplITK image, imports it into Blender with an integer intensity attribute,
