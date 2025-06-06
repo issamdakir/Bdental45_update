@@ -1,6 +1,6 @@
 import bpy# type: ignore
 from os.path import exists
-from .utils import (BdentalConstants, get_bdental_version)
+from .utils import (BdentalConstants, get_bdental_version, update_is_availible)
 
 
 
@@ -19,6 +19,7 @@ class BDENTAL_PT_MainPanel(bpy.types.Panel):
     bl_category = BdentalConstants.ADDON_NAME
     bl_label = ""
     bl_options = {"HIDE_HEADER", "DEFAULT_CLOSED"}
+    remote_version = update_is_availible()
 
     def draw(self, context):
         _props = context.scene.BDENTAL_Props
@@ -32,23 +33,40 @@ class BDENTAL_PT_MainPanel(bpy.types.Panel):
         coll = split.column(align=True)
         coll.alert = True
         coll.label(text=f"{BdentalConstants.ADDON_NAME} (ver. {BdentalConstants.ADDON_VER_DATE})")
-        coll = split.column(align=True)
-        coll.operator("wm.bdental_checkupdate", text="Check for Updates", icon="FILE_REFRESH")      
-        
         g = box.grid_flow(columns=2, align=True)
         g.operator("wm.bdental_support_telegram")
         g.operator("wm.bdental_remove_info_footer", icon="CANCEL")
+        
+        if self.remote_version :
+            grid = box.grid_flow(columns=1, align=True)
+            grid.alert = True
+            grid.label(text=f"new version availible :{self.remote_version} ")
+            grid.operator("wm.bdental_checkupdate", text="Check for Updates", icon="FILE_REFRESH")
+        
+        
+        
         # g = box.grid_flow(columns=1, align=True)
         # g.operator("wm.bdental_draw_tester")
 
         if not bpy.data.filepath:
-            r = box.row(align=True)
-            r.alert = True
-            r.label(text="Please add new Project !")
-            r= box.row(align=True)
-            r.alert = True
-            r.operator("wm.bdental_new_project")
+            box = layout.box()
+            split = box.split(factor=0.5, align=True)
+
+            coll = split.column(align=True)
+            coll.alert = True
+            coll.operator("wm.bdental_new_project")
+
+            coll = split.column(align=True)
+            coll.operator("wm.open_mainfile")
+
+            g = box.grid_flow(columns=1, align=True)
+            g.alert = True
+            g.label(text="Please add new Project, or open existing one.")
+            
         else :
+            box = layout.box()
+            g = box.grid_flow(columns=1, align=True)
+            g.operator("wm.open_mainfile")
 
             g = box.grid_flow(columns=2, align=True)
             g.alert = save_alert
@@ -73,17 +91,16 @@ class BDENTAL_PT_DicomPanel(bpy.types.Panel):
 
         BDENTAL_Props = context.scene.BDENTAL_Props
         layout = self.layout
-        box = layout.box()
+        
         if not bpy.data.filepath:
-            r = box.row(align=True)
-            r.alert = True
-            r.label(text="Please add new Project !")
-            # r= box.row(align=True)
-            # r.alert = True
-            # r.operator("wm.bdental_new_project")
-        else :
-            
+            box = layout.box()
+            g = box.grid_flow(columns=1, align=True)
+            g.alert = True
+            g.label(text="Please add new Project, or open existing one.")
 
+
+        else :
+            box = layout.box()
             g = box.grid_flow(columns=2, align=True)           
             g.prop(BDENTAL_Props, "dicomDataType", text="")
             if BDENTAL_Props.dicomDataType == "DICOM Series":
@@ -135,15 +152,16 @@ class BDENTAL_PT_SlicesPanel(bpy.types.Panel):
         #     return
         BDENTAL_Props = context.scene.BDENTAL_Props
         layout = self.layout
-        box = layout.box()
+        
         if not bpy.data.filepath:
-            r = box.row(align=True)
-            r.alert = True
-            r.label(text="Please add new Project !")
-            # r= box.row(align=True)
-            # r.alert = True
-            # r.operator("wm.bdental_new_project")
+            box = layout.box()
+            g = box.grid_flow(columns=1, align=True)
+            g.alert = True
+            g.label(text="Please add new Project, or open existing one.")
+
+
         else :
+            box = layout.box()
             row = box.row()
             row.operator("wm.bdental_volume_slicer",text="Update Dicom Slices", icon="EMPTY_AXIS")
             row.prop(BDENTAL_Props, "slicesColorThresholdBool", text="Slices Label")
@@ -201,9 +219,11 @@ class BDENTAL_PT_ToolsPanel(bpy.types.Panel):
         ob = context.object
         if not bpy.data.filepath:
             box = layout.box()
-            r = box.row(align=True)
-            r.alert = True
-            r.label(text="Please add new Project !")
+            g = box.grid_flow(columns=1, align=True)
+            g.alert = True
+            g.label(text="Please add new Project, or open existing one.")
+
+
         else :
             # Model color :
             if ob and ob.type in ["MESH", "CURVE"]:
@@ -386,11 +406,14 @@ class BDENTAL_PT_ImplantPanel(bpy.types.Panel):
     def draw(self, context):
         
         layout = self.layout
+        
         if not bpy.data.filepath:
             box = layout.box()
-            r = box.row(align=True)
-            r.alert = True
-            r.label(text="Please add new Project !")
+            g = box.grid_flow(columns=1, align=True)
+            g.alert = True
+            g.label(text="Please add new Project, or open existing one.")
+
+
         else :
             box = layout.box()
             # box.label(text="IMPLANT")#icon=yellow_point
@@ -435,19 +458,17 @@ class BDENTAL_PT_Guide(bpy.types.Panel):
         layout = self.layout
         if not bpy.data.filepath:
             box = layout.box()
-            r = box.row(align=True)
-            r.alert = True
-            r.label(text="Please add new Project !")
+            g = box.grid_flow(columns=1, align=True)
+            g.alert = True
+            g.label(text="Please add new Project, or open existing one.")
+
+
         else :
 
             box = layout.box()
-            
-
             row = box.row()
-
             # row.operator("wm.bdental_add_guide_splint")
             row.operator("wm.bdental_add_guide_splint_geom")
-
             row = box.row()
             row.operator("wm.bdental_add_tube")
             row.prop(BDENTAL_Props, "TubeCloseMode", text="")
@@ -496,11 +517,14 @@ class BDENTAL_PT_Align(bpy.types.Panel):
     def draw(self, context):
         BDENTAL_Props = context.scene.BDENTAL_Props
         layout = self.layout
+
         if not bpy.data.filepath:
             box = layout.box()
-            r = box.row(align=True)
-            r.alert = True
-            r.label(text="Please add new Project !")
+            g = box.grid_flow(columns=1, align=True)
+            g.alert = True
+            g.label(text="Please add new Project, or open existing one.")
+
+
         else :
             box = layout.box()
 
@@ -571,9 +595,11 @@ class BDENTAL_PT_BLibrary(bpy.types.Panel):
         layout = self.layout
         if not bpy.data.filepath:
             box = layout.box()
-            r = box.row(align=True)
-            r.alert = True
-            r.label(text="Please add new Project !")
+            g = box.grid_flow(columns=1, align=True)
+            g.alert = True
+            g.label(text="Please add new Project, or open existing one.")
+
+
         else :
             box = layout.box()
             grid = box.grid_flow(columns=1, align=True)

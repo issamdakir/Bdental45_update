@@ -39,6 +39,16 @@ def get_bdental_version(filepath=None):
         bdental_log(txt_message)
         return "####"
     
+def update_is_availible() :
+    if BdentalConstants.ADDON_VER_DATE == "####" or not isConnected():
+        return None
+    remote_version,success,error_txt_list = get_update_version()
+            
+    if not success or remote_version <= BdentalConstants.ADDON_VER_DATE :
+        return None
+    
+    return remote_version
+
 class AreaTagManager:
     def __init__(self):
         self._data = weakref.WeakKeyDictionary()
@@ -77,7 +87,7 @@ class BdentalConstants():
     CONFIG_ZIP_NAME = "config.zip"
     STARTUP_FILE_NAME = "startup.blend"
 
-    ADDON_NAME = "Bdental-4.5"
+    ADDON_NAME = "Bdental45a"
     
     ADDON_DIR = dirname(abspath(__file__))
     

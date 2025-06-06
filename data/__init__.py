@@ -36,10 +36,12 @@ from .utils import (
     import_required_modules,
     addon_update_preinstall,
     get_update_version,
-    addon_update_download
+    addon_update_download,
+    update_is_availible,
 )
 ERROR_MESSAGE = []
 ERROR_PANEL = False
+remote_version = update_is_availible()
 
 set_modules_path()
 
@@ -155,6 +157,7 @@ class BdentalAddonPreferences(bpy.types.AddonPreferences):
             row.operator("wm.bdental_set_config", text="Bdental as default", icon="TOOL_SETTINGS")
             row = box.row()
             row.operator("wm.bdental_add_bdental_library", text="Add Bdental Library", icon="TOOL_SETTINGS")
+            
 
 class BDENTAL_OT_checkUpdate(bpy.types.Operator):
     """ check addon update """
@@ -233,7 +236,7 @@ class BDENTAL_PT_ModulesErrorPanel(bpy.types.Panel):
     bl_label = f"{BdentalConstants.ADDON_NAME} (ver. {BdentalConstants.ADDON_VER_DATE})"
 
     def draw(self, context):
-
+        global remote_version
         layout = self.layout
         
         box = layout.box()
@@ -241,14 +244,34 @@ class BDENTAL_PT_ModulesErrorPanel(bpy.types.Panel):
         grid.alert = True
         for l in ERROR_MESSAGE :
             grid.label(text=l)
-        grid = box.grid_flow(columns=2, align=True)
-        grid.operator("wm.bdental_checkupdate")
-        grid.operator("wm.bdental_support_telegram")
+
         grid = box.grid_flow(columns=1, align=True)
         grid.operator("wm.bdental_modules_pip_installer")
+        grid.operator("wm.bdental_support_telegram")
+        
+        if remote_version :
+            grid = box.grid_flow(columns=2, align=True)
+            grid.operator("wm.bdental_checkupdate", text="Check for Updates", icon="FILE_REFRESH")
+            grid.alert = True
+            grid.label(text=f"new version availible :{self.remote_version} ")
+            
+        # else :
+            
+        #     grid.operator("wm.bdental_checkupdate", text="Check for Updates", icon="FILE_REFRESH") 
+        
+        
+        # if remote_version :
+        #     grid = box.grid_flow(columns=1, align=True)
+        #     grid.alert = True
+        #     grid.label(text=f"new version {remote_version} availible")
+
+        # grid = box.grid_flow(columns=1, align=True)
+        # grid.operator("wm.bdental_checkupdate")
+        
+        
 
 ###################################################
-txt_list = [f"{bl_info.get('name')} started version : {BdentalConstants.ADDON_VER_DATE}"]
+txt_list = [f"{BdentalConstants.ADDON_NAME} started version : {BdentalConstants.ADDON_VER_DATE}"]
 bdental_log(txt_list)
 
 new_modules = join(BdentalConstants.RESOURCES, "bdental_modules")
