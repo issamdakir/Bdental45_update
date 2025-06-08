@@ -572,12 +572,13 @@ def exclude_coll(_exclude=True, colname=""):
 
 def hide_collection(_hide=True, colname=""):
     coll = bpy.data.collections.get(colname)
-    lc = get_layerColl(colname)
-    if coll and lc:
-        coll.hide_select = _hide
-        coll.hide_viewport = _hide
-        lc.exclude = _hide
-        lc.hide_viewport = _hide
+    if coll :
+        lc = get_layerColl(colname)
+        if lc:
+            coll.hide_select = _hide
+            coll.hide_viewport = _hide
+            lc.exclude = _hide
+            lc.hide_viewport = _hide
 
 
 def hide_object(_hide=True, obj=None):

@@ -370,25 +370,43 @@ class BDENTAL_OT_AlignToActive(bpy.types.Operator):
         return context.object and context.object.select_get() and len(context.selected_objects) == 2
 
     def execute(self, context):
-        selected = context.selected_objects
-        active_object = context.object
-        other_object = [obj for obj in selected if not obj is active_object][0]
-        for obj in selected:
+        self.selected = context.selected_objects
+        self.active_object = context.object
+        self.other_object = [obj for obj in self.selected if not obj is self.active_object][0]
+
+        for obj in self.selected:
             context.view_layer.objects.active = obj
             bpy.ops.object.transform_apply(
                 location=False, rotation=False, scale=True)
-
-        # obj.location = active_object.location
-        # obj.rotation_euler = active_object.rotation_euler
-        other_object.matrix_world[:3] = active_object.matrix_world[:3]
+            
+        if self.active_object.get(BdentalConstants.BDENTAL_TYPE_TAG ) == BdentalConstants.BDENTAL_IMPLANT_TYPE :
+            tooth_number = self.active_object[BdentalConstants.BDENTAL_IMPLANT_REMOVE_CODE_TAG]
+            if tooth_number < 31 :
+                self.invert_z = True
+        self.other_object.matrix_world[:3] = self.active_object.matrix_world[:3]
         if self.invert_z:
-            other_object.rotation_euler.rotate_axis("X", math.pi)
+            self.other_object.rotation_euler.rotate_axis("X", math.pi)
 
         return{"FINISHED"}
 
-    def invoke(self, context, event):
-        wm = context.window_manager
-        return wm.invoke_props_dialog(self)
+    # def invoke(self, context, event):
+    #     self.selected = context.selected_objects
+    #     self.active_object = context.object
+    #     self.other_object = [obj for obj in self.selected if not obj is self.active_object][0]
+
+    #     for obj in self.selected:
+    #         context.view_layer.objects.active = obj
+    #         bpy.ops.object.transform_apply(
+    #             location=False, rotation=False, scale=True)
+            
+    #     if self.active_object.get(BdentalConstants.BDENTAL_TYPE_TAG ) == BdentalConstants.BDENTAL_IMPLANT_TYPE :
+    #         self.other_object.matrix_world[:3] = self.active_object.matrix_world[:3]
+    #         tooth_number = self.active_object[BdentalConstants.BDENTAL_IMPLANT_REMOVE_CODE_TAG]
+    #         if tooth_number < 31 :
+    #             self.other_object.rotation_euler.rotate_axis("X", math.pi)
+    #         return{"FINISHED"}
+    #     wm = context.window_manager
+    #     return wm.invoke_props_dialog(self)
 
 class BDENTAL_OT_LockObjects(bpy.types.Operator):
     """ Lock objects transform """
@@ -2579,6 +2597,8 @@ class BDENTAL_OT_AddImplant(bpy.types.Operator):
         implant_type = "up" if self.tooth_number < 31 else "low"
         implants_coll = add_collection(BdentalConstants.BDENTAL_IMPLANT_COLLECTION_NAME)
         guide_components_coll = add_collection(BdentalConstants.GUIDE_COMPONENTS_COLLECTION_NAME)
+        for collname in (BdentalConstants.BDENTAL_IMPLANT_COLLECTION_NAME, BdentalConstants.GUIDE_COMPONENTS_COLLECTION_NAME):
+            hide_collection(False, collname)
         
 
         coll = AppendCollection("implant", parent_coll_name=implants_coll.name)
@@ -3242,34 +3262,35 @@ class BDENTAL_OT_FlyToImplantOrFixingSleeve(bpy.types.Operator):
             obj for obj in context.scene.objects if  obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.SLICES_POINTER_TYPE]
         if not slices_pointer_check_list:
             return False
-        if not (context.object and context.object.select_get()):
-            return False
         
-        target_object_type = context.object.get(BdentalConstants.BDENTAL_TYPE_TAG)
-        if not target_object_type in [BdentalConstants.BDENTAL_IMPLANT_TYPE, BdentalConstants.FIXING_SLEEVE_TYPE]:
-            return False
         target_objects = [
-            obj for obj in context.scene.objects if  obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == target_object_type]
-        
-        if not target_objects or len(target_objects) < 2:
+            obj for obj in context.scene.objects if  obj.get(BdentalConstants.BDENTAL_TYPE_TAG) \
+            in [BdentalConstants.BDENTAL_IMPLANT_TYPE, BdentalConstants.FIXING_SLEEVE_TYPE]
+        ]
+        if not target_objects :
             return False
         return True
 
     def execute(self, context):
         global FLY_IMPLANT_INDEX
-        collections = [BdentalConstants.SLICES_POINTER_COLLECTION_NAME, BdentalConstants.BDENTAL_IMPLANT_COLLECTION_NAME]
+        collections = [
+            BdentalConstants.SLICES_POINTER_COLLECTION_NAME, 
+            BdentalConstants.BDENTAL_IMPLANT_COLLECTION_NAME,
+            BdentalConstants.GUIDE_COMPONENTS_COLLECTION_NAME
+                       ]
         for collname in collections:
             hide_collection(False, collname)
+
         slices_pointer_check_list = [
             obj for obj in context.scene.objects if  obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.SLICES_POINTER_TYPE]
         slices_pointer = slices_pointer_check_list[0]
-        hide_collection(False, BdentalConstants.SLICES_POINTER_COLLECTION_NAME)
         hide_object(False, slices_pointer)
 
-        target_object_type = context.object.get(BdentalConstants.BDENTAL_TYPE_TAG)
-        target_objects = [
-            obj for obj in context.scene.objects if  obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == target_object_type]
-        for obj in target_objects+[slices_pointer]:
+        target_objects_all = sorted([
+            obj for obj in context.scene.objects if  obj.get(BdentalConstants.BDENTAL_TYPE_TAG) \
+            in [BdentalConstants.BDENTAL_IMPLANT_TYPE, BdentalConstants.FIXING_SLEEVE_TYPE]
+        ],  key=lambda x:x.name)
+        for obj in target_objects_all:
             hide_object(False, obj)
 
         remove_all_pointer_child_of()
@@ -3278,10 +3299,10 @@ class BDENTAL_OT_FlyToImplantOrFixingSleeve(bpy.types.Operator):
             FLY_IMPLANT_INDEX = 0
         else :
             if self.direction == "next":
-                FLY_IMPLANT_INDEX = FLY_IMPLANT_INDEX + 1 if FLY_IMPLANT_INDEX + 1 < len(target_objects) else 0
+                FLY_IMPLANT_INDEX = FLY_IMPLANT_INDEX + 1 if FLY_IMPLANT_INDEX + 1 < len(target_objects_all) else 0
             elif self.direction == "previous":
-                FLY_IMPLANT_INDEX = FLY_IMPLANT_INDEX - 1 if FLY_IMPLANT_INDEX - 1 >=0 else len(target_objects) - 1
-        move_to_target = target_objects[FLY_IMPLANT_INDEX]
+                FLY_IMPLANT_INDEX = FLY_IMPLANT_INDEX - 1 if FLY_IMPLANT_INDEX - 1 >=0 else len(target_objects_all) - 1
+        move_to_target = target_objects_all[FLY_IMPLANT_INDEX]
         
         slices_pointer.matrix_world[:3] = move_to_target.matrix_world[:3]
 
@@ -3295,7 +3316,7 @@ class BDENTAL_OT_FlyToImplantOrFixingSleeve(bpy.types.Operator):
         context.view_layer.objects.active = move_to_target
         bpy.ops.object.select_all(action="DESELECT")
         move_to_target.select_set(True)
-
+        # bpy.ops.wm.bdental_lock_object_to_pointer()
         return {"FINISHED"}
 
 class BDENTAL_OT_AlignObjectsAxes(bpy.types.Operator):
@@ -5231,7 +5252,8 @@ class BDENTAL_OT_AddFixingPin(bpy.types.Operator):
         n=0
         fpins = [o for o in context.scene.objects[:] if o.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.FIXING_PIN_TYPE]
         if fpins : n = len(fpins)
-        
+        coll_name=BdentalConstants.GUIDE_COMPONENTS_COLLECTION_NAME
+        hide_collection(False, coll_name)
         
         #Add pin
         bpy.ops.object.select_all(action="DESELECT")
