@@ -117,11 +117,26 @@ class BDENTAL_PT_DicomPanel(bpy.types.Panel):
             g = box.grid_flow(columns=1, align=False)
             g.operator("wm.bdental_dicom_reader", text="Read DICOM", icon="IMPORT")
             
-        
-            g = box.grid_flow(columns=1, align=True)
-            g.prop(BDENTAL_Props, "ThresholdMin", text="threshold", slider=True)
-            # if context.object and context.object.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.PCD_OBJECT_TYPE:
-            #     TODO: add auto size, point radius, opacity, emission
+            
+            
+            if context.object and context.object.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.PCD_OBJECT_TYPE:
+                box = layout.box()
+                g = box.grid_flow(columns=1, align=True)
+                g.prop(BDENTAL_Props, "ThresholdMin", text="threshold", slider=True)
+
+                box.label(text="Point cloud settings :")
+                g = box.grid_flow(columns=2, align=True)
+                g.prop(BDENTAL_Props, "pcd_point_radius", text="Point radius", slider=True)
+                g.prop(BDENTAL_Props, "pcd_point_auto_resize", text="Auto resize")
+
+                g = box.grid_flow(columns=1, align=True)
+                
+                g.prop(BDENTAL_Props, "pcd_points_opacity", text="Opacity", slider=True)
+                g.prop(BDENTAL_Props, "pcd_points_emission", text="Emission", slider=True)
+
+            else :
+                g = box.grid_flow(columns=1, align=True)
+                g.prop(BDENTAL_Props, "ThresholdMin", text="threshold", slider=True)
                 
 
             box.separator()

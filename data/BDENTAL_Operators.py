@@ -374,20 +374,41 @@ class BDENTAL_OT_AlignToActive(bpy.types.Operator):
         self.active_object = context.object
         self.other_object = [obj for obj in self.selected if not obj is self.active_object][0]
 
-        for obj in self.selected:
-            context.view_layer.objects.active = obj
-            bpy.ops.object.transform_apply(
-                location=False, rotation=False, scale=True)
+        self.other_object.matrix_world[:3] = self.active_object.matrix_world[:3]
+        # for obj in self.selected:
+        #     context.view_layer.objects.active = obj
+        #     bpy.ops.object.transform_apply(
+        #         location=False, rotation=False, scale=True)
             
+        # self.invert_z = False
         if self.active_object.get(BdentalConstants.BDENTAL_TYPE_TAG ) == BdentalConstants.BDENTAL_IMPLANT_TYPE :
+            bpy.ops.object.select_all(action="DESELECT")
             tooth_number = self.active_object[BdentalConstants.BDENTAL_IMPLANT_REMOVE_CODE_TAG]
             if tooth_number < 31 :
                 self.invert_z = True
-        self.other_object.matrix_world[:3] = self.active_object.matrix_world[:3]
+            else :
+                self.invert_z = False
+        
         if self.invert_z:
             self.other_object.rotation_euler.rotate_axis("X", math.pi)
-
+        
         return{"FINISHED"}
+    
+    # def invoke(self, context, event):
+    #     self.selected = context.selected_objects
+    #     self.active_object = context.object
+    #     self.other_object = [obj for obj in self.selected if not obj is self.active_object][0]
+
+    #     if self.active_object.get(BdentalConstants.BDENTAL_TYPE_TAG ) == BdentalConstants.BDENTAL_IMPLANT_TYPE :
+    #         tooth_number = self.active_object[BdentalConstants.BDENTAL_IMPLANT_REMOVE_CODE_TAG]
+    #         if tooth_number < 31 :
+    #             self.invert_z = True
+    #         else :
+    #             self.invert_z = False
+    #         self.other_object.matrix_world[:3] = self.active_object.matrix_world[:3]
+    #         bpy.ops.object.select_all(action="DESELECT")
+    #         return{"FINISHED"}
+    #     else :
 
     # def invoke(self, context, event):
     #     self.selected = context.selected_objects
@@ -1604,6 +1625,18 @@ class BDENTAL_OT_VolumeSlicer(bpy.types.Operator):
             bpy.ops.view3d.view_selected()
         bpy.ops.object.camera_add()
         Cam = context.object
+        
+        child_of = Cam.constraints.new("CHILD_OF")
+        child_of.target = p
+        child_of.use_scale_x = False
+        child_of.use_scale_y = False
+        child_of.use_scale_z = False
+
+        for i in range(3):
+            Cam.lock_location[i] = True
+            Cam.lock_rotation[i] = True
+            Cam.lock_scale[i] = True
+        # Cam.parent = p
         Cam.name = f"{p.name}_CAM"
         Cam.data.name = f"{p.name}_CAM_data"
         Cam[BdentalConstants.BDENTAL_TYPE_TAG] = BdentalConstants.SLICE_CAM_TYPE
@@ -1865,11 +1898,11 @@ class BDENTAL_OT_VolumeSlicer(bpy.types.Operator):
 
         for obj in [
             self.axial_p,
-            self.axial_cam,
+            # self.axial_cam,
             self.coronal_p,
-            self.coronal_cam,
+            # self.coronal_cam,
             self.sagittal_p,
-            self.sagittal_cam,
+            # self.sagittal_cam,
         ]:
             obj.matrix_world = self.slices_pointer.matrix_world @ obj.matrix_world
 
@@ -3307,15 +3340,16 @@ class BDENTAL_OT_FlyToImplantOrFixingSleeve(bpy.types.Operator):
         slices_pointer.matrix_world[:3] = move_to_target.matrix_world[:3]
 
         # trigger slices update
-        # bpy.ops.object.select_all(action="DESELECT")
+        bpy.ops.object.select_all(action="DESELECT")
         context.view_layer.objects.active = slices_pointer
         slices_pointer.select_set(True)
-        bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP') 
+
+        # bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP') 
 
         # select target
-        context.view_layer.objects.active = move_to_target
-        bpy.ops.object.select_all(action="DESELECT")
-        move_to_target.select_set(True)
+        # context.view_layer.objects.active = move_to_target
+        # bpy.ops.object.select_all(action="DESELECT")
+        # move_to_target.select_set(True)
         # bpy.ops.wm.bdental_lock_object_to_pointer()
         return {"FINISHED"}
 
@@ -4865,8 +4899,8 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
         name="Guide Component",
         description="Guide Component",
         items=set_enum_items(
-            ["Guide Sleeve Cutter","Cube", "Sphere", "Cylinder", "3D Text"]),
-        default="Guide Sleeve Cutter",
+            ["Cube", "Sphere", "Cylinder", "3D Text","Guide Sleeve Cutter"]),
+        default="Cube",
     ) # type: ignore
     component_type: EnumProperty(
         name="Component Type",
@@ -4875,7 +4909,7 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
         default="CUT",
     ) # type: ignore
     component_size: FloatProperty(
-        description="Component Size", default=2, step=1, precision=2
+        description="Component Size", default=5, step=1, precision=2
     ) # type: ignore
 
     def draw(self, context):
@@ -4907,7 +4941,7 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
                 if self.guide_component == "Cube":
                     bpy.ops.mesh.primitive_cube_add(
                         size=self.component_size, align='CURSOR')
-                    cube = context.object
+                    self.object = cube = context.object
                     n = len(
                         [o for o in bpy.data.objects if "Cube_Component" in o.name])
                     cube.name = f"{self.preffix}Cube_Component({n+1})"
@@ -4928,7 +4962,7 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
                 elif self.guide_component == "Sphere":
                     bpy.ops.mesh.primitive_uv_sphere_add(
                         radius=self.component_size, align='CURSOR')
-                    sphere = context.object
+                    self.object = sphere = context.object
                     n = len(
                         [o for o in bpy.data.objects if "Sphere_Component" in o.name])
                     sphere.name = f"{self.preffix}Sphere_Component({n+1})"
@@ -4949,7 +4983,7 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
                 elif self.guide_component == "Cylinder":
                     bpy.ops.mesh.primitive_cylinder_add(
                         radius=self.component_size/2, depth=self.component_size*2, align='CURSOR')
-                    cylinder = context.object
+                    self.object = cylinder = context.object
                     n = len(
                         [o for o in bpy.data.objects if "Cylinder_Component" in o.name])
                     cylinder.name = f"{self.preffix}Cylinder_Component({n+1})"
@@ -4967,16 +5001,23 @@ class BDENTAL_OT_GuideAddComponent(bpy.types.Operator):
                         bpy.ops.wm.tool_set_by_id(
                             name="builtin.transform")
                     BDENTAL_GpuDrawText()
+                    
 
                 elif self.guide_component == "3D Text":
+                    self.object = None
                     if self.component_type == "CUT":
                         bpy.ops.wm.bdental_guide_3d_text(
                             "EXEC_DEFAULT", add=False)
                     else:
                         bpy.ops.wm.bdental_guide_3d_text(
                             "EXEC_DEFAULT", add=True)
-                      
+                if self.object :     
+                    bpy.ops.object.select_all(action='DESELECT')    
+                    self.object.select_set(True)
+                    context.view_layer.objects.active = self.object
+
                 return {'FINISHED'}
+            
         return {'RUNNING_MODAL'}
 
     def invoke(self, context, event):

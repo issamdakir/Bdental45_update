@@ -16,9 +16,8 @@ from .utils import (
     set_enum_items,
     HuTo255,
 )
-def pointCloudThresholdMinUpdateFunction(self, context):
-    return
-def ThresholdMinUpdateFunction(self, context):
+
+def on_threshold_min_update(self, context):
     vis_coll = bpy.data.collections.get(BdentalConstants.DICOM_VIZ_COLLECTION_NAME)
     if not vis_coll or not vis_coll.objects:
         return
@@ -36,32 +35,102 @@ def ThresholdMinUpdateFunction(self, context):
         targets_list = vis_objects
     for target in targets_list:
         if target.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.PCD_OBJECT_TYPE :
-            pcd_modifier = target.modifiers[BdentalConstants.PCD_GEONODE_MODIFIER_NAME]
-            threshold_255 = HuTo255(self.ThresholdMin)
-            pcd_modifier["Socket_2"] = threshold_255
-            target.data.update()
+            pcd_node_group = target.modifiers[BdentalConstants.PCD_GEONODE_MODIFIER_NAME].node_group
+            pcd_theshold = pcd_node_group.nodes.get(BdentalConstants.PCD_THRESHOLD_NODE_NAME)
+            if pcd_theshold:
+                threshold_255 = HuTo255(self.ThresholdMin)
+                pcd_theshold.integer = threshold_255
+                # print(f"pcd threshold updated = {pcd_theshold.integer}")
+                # target.data.update()
 
         elif target.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.VOXEL_OBJECT_TYPE :
             voxel_node_group = bpy.data.node_groups[target[BdentalConstants.VOXEL_NODE_NAME_TAG]]
             voxel_node_group.nodes["Low_Treshold"].outputs[0].default_value = self.ThresholdMin
-    # active_obj = context.object
-    # if active_obj and active_obj.select_get() and active_obj in vis_objects:
-    #     target = active_obj
-    # else :
-    #     target = vis_objects[0]
-    # if target and target.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.PCD_OBJECT_TYPE :
-    #     pcd_modifier = target.modifiers.get(BdentalConstants.PCD_GEONODE_MODIFIER_NAME)
-    #     if pcd_modifier :
-    #         threshold_255 = HuTo255(self.ThresholdMin)
-    #         pcd_modifier["Socket_2"] = threshold_255
-    #         target.data.update()
-                
-    # elif target and target.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.VOXEL_OBJECT_TYPE :
-    #     voxel_node_name = target.get(BdentalConstants.VOXEL_NODE_NAME_TAG)
-    #     if voxel_node_name and bpy.data.node_groups.get(voxel_node_name):
-    #         voxel_node_group = bpy.data.node_groups[voxel_node_name]
-    #         voxel_node_group.nodes["Low_Treshold"].outputs[0].default_value = self.ThresholdMin
-    sleep(0.1)
+
+def on_pcd_point_radius_update(self, context):
+    vis_coll = bpy.data.collections.get(BdentalConstants.DICOM_VIZ_COLLECTION_NAME)
+    if not vis_coll or not vis_coll.objects:
+        return
+    pcd_vis_check = [obj for obj in vis_coll.objects if obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.PCD_OBJECT_TYPE]
+    if not pcd_vis_check:
+        return
+    
+    targets_list = []
+    active_obj = context.object
+    if active_obj and active_obj.select_get() and active_obj in pcd_vis_check:
+        targets_list.append(active_obj)
+    else:
+        targets_list = pcd_vis_check
+
+    for target in targets_list: 
+        pcd_node_group = target.modifiers[BdentalConstants.PCD_GEONODE_MODIFIER_NAME].node_group
+        pcd_opacity = pcd_node_group.nodes.get(BdentalConstants.PCD_OPACITY_NODE_NAME)
+        if pcd_opacity:
+            pcd_opacity.default = self.pcd_point_radius
+
+def on_pcd_point_auto_resize_update(self, context):
+    vis_coll = bpy.data.collections.get(BdentalConstants.DICOM_VIZ_COLLECTION_NAME)
+    if not vis_coll or not vis_coll.objects:
+        return
+    pcd_vis_check = [obj for obj in vis_coll.objects if obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.PCD_OBJECT_TYPE]
+    if not pcd_vis_check:
+        return
+    
+    targets_list = []
+    active_obj = context.object
+    if active_obj and active_obj.select_get() and active_obj in pcd_vis_check:
+        targets_list.append(active_obj)
+    else:
+        targets_list = pcd_vis_check
+
+    for target in targets_list: 
+        pcd_node_group = target.modifiers[BdentalConstants.PCD_GEONODE_MODIFIER_NAME].node_group
+        pcd_point_auto_resize = pcd_node_group.nodes.get(BdentalConstants.PCD_POINT_AUTO_RESIZE_NODE_NAME)
+        if pcd_point_auto_resize:
+            pcd_point_auto_resize.boolean = self.pcd_point_auto_resize
+
+def on_pcd_points_opacity_update(self, context):
+    vis_coll = bpy.data.collections.get(BdentalConstants.DICOM_VIZ_COLLECTION_NAME)
+    if not vis_coll or not vis_coll.objects:
+        return
+    pcd_vis_check = [obj for obj in vis_coll.objects if obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.PCD_OBJECT_TYPE]
+    if not pcd_vis_check:
+        return
+    
+    targets_list = []
+    active_obj = context.object
+    if active_obj and active_obj.select_get() and active_obj in pcd_vis_check:
+        targets_list.append(active_obj)
+    else:
+        targets_list = pcd_vis_check
+
+    for target in targets_list: 
+        pcd_node_group = target.modifiers[BdentalConstants.PCD_GEONODE_MODIFIER_NAME].node_group
+        pcd_points_opacity = pcd_node_group.nodes.get(BdentalConstants.PCD_OPACITY_NODE_NAME)
+        if pcd_points_opacity:
+            pcd_points_opacity.integer = self.pcd_points_opacity
+
+def on_pcd_points_emission_update(self, context):
+    vis_coll = bpy.data.collections.get(BdentalConstants.DICOM_VIZ_COLLECTION_NAME)
+    if not vis_coll or not vis_coll.objects:
+        return
+    pcd_vis_check = [obj for obj in vis_coll.objects if obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.PCD_OBJECT_TYPE]
+    if not pcd_vis_check:
+        return
+    
+    targets_list = []
+    active_obj = context.object
+    if active_obj and active_obj.select_get() and active_obj in pcd_vis_check:
+        targets_list.append(active_obj)
+    else:
+        targets_list = pcd_vis_check
+
+    for target in targets_list: 
+        pcd_mat = bpy.data.materials.get(BdentalConstants.PCD_MAT_NAME)
+        if pcd_mat :
+            pcd_points_emission = pcd_mat.node_tree.nodes[BdentalConstants.PCD_POINT_EMISSION_NODE_NAME].outputs[0]
+            pcd_points_emission.default_value = self.pcd_points_emission
+         
 
 def get_dicom_series_items_callback(self, context):
     enum_items = set_enum_items(["EMPTY"])
@@ -107,11 +176,6 @@ def contrast_update(self, context):
      
 class BDENTAL_Props(bpy.types.PropertyGroup):
 
-    #####################
-    #############################################################################################
-    # CT_Scan props :
-    #############################################################################################
-    #####################
     ProjectNameProp: StringProperty(
         name="Project Name",
         default='',
@@ -154,11 +218,13 @@ class BDENTAL_Props(bpy.types.PropertyGroup):
         default='{}',
         description="Dicom Dictionary",
     ) # type: ignore
+    
     dicom_series_dictionary: StringProperty(
         name="Dicom Series Dictionary",
         default='{}',
         description="Dicom Series Dictionary",
     ) # type: ignore
+    
     current_dicom_dictionary: StringProperty(
         name="Current Dicom Dictionary",
         default='{}',
@@ -189,13 +255,8 @@ class BDENTAL_Props(bpy.types.PropertyGroup):
         subtype="DIR_PATH",
     ) # type: ignore
 
+    dicomDataType: EnumProperty(items=set_enum_items(["DICOM Series", "3D Image File"]), description="Data type", default="DICOM Series") # type: ignore
 
-    #####################
-
-    dicom_data_type_items = ["DICOM Series", "3D Image File", ""]
-    dicomDataType: EnumProperty(items=set_enum_items(dicom_data_type_items), description="Data type", default="DICOM Series") # type: ignore
-
-    #######################
     DcmOrganize: StringProperty(
         name="(str) Organize Dicom",
         default="{'Deffault': None}",
@@ -207,15 +268,13 @@ class BDENTAL_Props(bpy.types.PropertyGroup):
         default="dict()",
         description="Dicom series files list",
     )# type: ignore
-    #######################
+
 
     PngDir: StringProperty(
         name="Png Directory",
         default="",
         description=" PNG files Sequence Directory Path",
     )# type: ignore
-    
-    #######################
 
     Nrrd255Path: StringProperty(
         name="Nrrd255Path",
@@ -223,7 +282,6 @@ class BDENTAL_Props(bpy.types.PropertyGroup):
         description="Nrrd image3D file Path",
     ) # type: ignore
 
-    #######################
     IcpVidDict: StringProperty(
             name="IcpVidDict",
             default="None",
@@ -258,16 +316,44 @@ class BDENTAL_Props(bpy.types.PropertyGroup):
         soft_min=BdentalConstants.WMIN,
         soft_max=BdentalConstants.WMAX,
         step=1,
-        update=ThresholdMinUpdateFunction) # type: ignore
+        update=on_threshold_min_update) # type: ignore
     
-    # pointCloudThresholdMin: IntProperty(
-    #     name="PCD threshold",
-    #     description=f"value between {BdentalConstants.WMIN} and {BdentalConstants.WMAX} for point cloud points extraction",
-    #     default=200,
-    #     min=BdentalConstants.WMIN,
-    #     max=BdentalConstants.WMAX,
-    #     step=1,
-    #     update=pointCloudThresholdMinUpdateFunction) # type: ignore
+    pcd_point_radius : FloatProperty(
+        name="Point radius",
+        description="pcd point radius (group geometry node attribute)",
+        default=0.3,
+        min=0.0,
+        max=1.0,
+        update=on_pcd_point_radius_update,
+    ) # type: ignore
+    
+    pcd_point_auto_resize : BoolProperty(
+        name="Points auto resize",
+        description="pcd point radius auto resizing toggle",
+        default=True,
+        update=on_pcd_point_auto_resize_update,
+    ) # type: ignore
+    
+    pcd_points_opacity : IntProperty(
+        name="Opacity",
+        description="pcd points opacity",
+        default=100,
+        subtype='PERCENTAGE',
+        min=0,
+        max=100,
+        update=on_pcd_points_opacity_update,
+    ) # type: ignore
+    
+    pcd_points_emission : IntProperty(
+        name="Emission",
+        description="pcd points emission",
+        default=30,
+        subtype='PERCENTAGE',
+        min=0,
+        max=100,
+        update=on_pcd_points_emission_update,
+    ) # type: ignore
+    
     
     SegmentColor: FloatVectorProperty(
         name="Segmentation Color",

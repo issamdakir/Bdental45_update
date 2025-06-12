@@ -221,13 +221,18 @@ class BdentalConstants():
 
     PCD_OBJECT_NAME = "Point_Cloud_Vizualization"
     PCD_OBJECT_TYPE = "Point_Cloud_Vizualization_Object"
-    PCD_OBJECT_MAT_NAME = "Point_Cloud_Vizualization_Mat"
-    PCD_OBJECT_MAT_TAG = "pcd_mat"
+    PCD_MAT_NAME = "pcd_mat"
     PCD_INTENSITY_ATTRIBUTE_NAME = "voxel_intensity"
+    PCD_THRESHOLD_NODE_NAME = "pcd_threshold"
+    PCD_OPACITY_NODE_NAME = "pcd_opacity"
+    PCD_POINT_RADIUS_NODE_NAME = "pcd_point_radius"
+    PCD_POINT_AUTO_RESIZE_NODE_NAME = "pcd_point_auto_resize"
+    PCD_POINT_EMISSION_NODE_NAME = "pcd_emission"
     PCD_GEONODE_NAME = "pcd_geonode"
     PCD_GEONODE_NAME_TAG = "pcd_geonode_name"
     PCD_GEONODE_MODIFIER_NAME = "pcd_geonode_modifier"
     PCD_MAX_POINTS = 6_000_000
+
 
     LOCKED_TO_POINTER_MAT_NAME = "bdental_locked_to_pointer_mat"
     PREVIOUS_ACTIVE_MAT_NAME_TAG = "bdental_previous_mat"

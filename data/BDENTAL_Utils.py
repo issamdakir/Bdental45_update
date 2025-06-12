@@ -38,7 +38,9 @@ ProgEvent = vtkCommand.ProgressEvent
 _PREFFIX = None
 
 ######################################################################
-def remove_all_pointer_child_of(exclude=(BdentalConstants.SLICE_PLANE_TYPE, BdentalConstants.SLICES_POINTER_TYPE)):
+def remove_all_pointer_child_of(exclude=(BdentalConstants.SLICE_PLANE_TYPE,
+                                        BdentalConstants.SLICES_POINTER_TYPE,
+                                        BdentalConstants.SLICE_CAM_TYPE)):
     slices_pointer_checklist = [
             obj for obj in bpy.context.scene.objects if \
             obj.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.SLICES_POINTER_TYPE
@@ -57,6 +59,7 @@ def remove_all_pointer_child_of(exclude=(BdentalConstants.SLICE_PLANE_TYPE, Bden
                     bpy.context.view_layer.objects.active = obj
                     bpy.ops.wm.bdental_unlock_object_from_pointer()
                 except Exception as e:
+                    bdental_log([f"catched error : {e}", f"object name : {obj.name}"])
                     pass
 def create_point_cloud(sitk_image, threshold=600, sample_fraction=1.0,dicom_preffix="", layer_color=(1.0, 1.0, 1.0)):
     """
