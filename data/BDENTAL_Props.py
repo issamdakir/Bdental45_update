@@ -261,7 +261,7 @@ class BDENTAL_Props(bpy.types.PropertyGroup):
     pcd_points_max : IntProperty(
         name="Max points count",
         description="Maximum total pcd points count",
-        default=BdentalConstants.PCD_MAX_POINTS,
+        default=BdentalConstants.PCD_MAX_POINTS, # millions
         min=0,
     ) # type: ignore
 

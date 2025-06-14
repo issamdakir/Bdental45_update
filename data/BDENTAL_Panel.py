@@ -125,7 +125,7 @@ class BDENTAL_PT_DicomPanel(bpy.types.Panel):
                 
                 split = box.split(factor=0.4, align=True)
                 coll = split.column(align=True)
-                coll.label(text="Points count max:")
+                coll.label(text="Points max (millions):")
                 coll = split.column(align=True)
                 coll.prop(BDENTAL_Props, "pcd_points_max", text="")
 

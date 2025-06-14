@@ -1086,7 +1086,7 @@ class BDENTAL_OT_Dicom_Reader(bpy.types.Operator):
                 - points: (N, 3) array of physical coordinates
                 - values: (N,) array of intensity values at those points
         """
-
+        max_points *= 1_000_000
         # Step 1: Threshold mask and count points
         pcd_threshold_min = self.pointCloudThresholdMin
         pcd_threshold_min_255 = HuTo255(pcd_threshold_min)
