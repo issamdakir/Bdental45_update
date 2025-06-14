@@ -232,6 +232,8 @@ class BdentalConstants():
     PCD_GEONODE_NAME_TAG = "pcd_geonode_name"
     PCD_GEONODE_MODIFIER_NAME = "pcd_geonode_modifier"
     PCD_MAX_POINTS = 6_000_000
+    PCD_SAMPLING_METHOD_GRID = "Grid sampling"
+    PCD_SAMPLING_METHOD_RANDOM = "Random sampling"
 
 
     LOCKED_TO_POINTER_MAT_NAME = "bdental_locked_to_pointer_mat"

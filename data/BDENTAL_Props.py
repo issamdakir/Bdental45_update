@@ -64,9 +64,9 @@ def on_pcd_point_radius_update(self, context):
 
     for target in targets_list: 
         pcd_node_group = target.modifiers[BdentalConstants.PCD_GEONODE_MODIFIER_NAME].node_group
-        pcd_opacity = pcd_node_group.nodes.get(BdentalConstants.PCD_OPACITY_NODE_NAME)
+        pcd_opacity = pcd_node_group.nodes.get(BdentalConstants.PCD_POINT_RADIUS_NODE_NAME)
         if pcd_opacity:
-            pcd_opacity.default = self.pcd_point_radius
+            pcd_opacity.outputs[0].default_value = self.pcd_point_radius
 
 def on_pcd_point_auto_resize_update(self, context):
     vis_coll = bpy.data.collections.get(BdentalConstants.DICOM_VIZ_COLLECTION_NAME)
@@ -248,6 +248,23 @@ class BDENTAL_Props(bpy.types.PropertyGroup):
         description="3D Dicom Visualisation Mode",
     ) # type: ignore
 
+    pcd_sampling_method : EnumProperty(
+        items=set_enum_items([
+            BdentalConstants.PCD_SAMPLING_METHOD_GRID,
+            BdentalConstants.PCD_SAMPLING_METHOD_RANDOM]),
+
+        name="Point cloud sampling",
+        default="Grid sampling",
+        description="point cloud sampling method",
+    ) # type: ignore
+
+    pcd_points_max : IntProperty(
+        name="Max points count",
+        description="Maximum total pcd points count",
+        default=BdentalConstants.PCD_MAX_POINTS,
+        min=0,
+    ) # type: ignore
+
     SlicesDir: StringProperty(
         name="SlicesDir",
         default="",
@@ -321,7 +338,7 @@ class BDENTAL_Props(bpy.types.PropertyGroup):
     pcd_point_radius : FloatProperty(
         name="Point radius",
         description="pcd point radius (group geometry node attribute)",
-        default=0.3,
+        default=0.5,
         min=0.0,
         max=1.0,
         update=on_pcd_point_radius_update,
@@ -337,7 +354,7 @@ class BDENTAL_Props(bpy.types.PropertyGroup):
     pcd_points_opacity : IntProperty(
         name="Opacity",
         description="pcd points opacity",
-        default=100,
+        default=50,
         subtype='PERCENTAGE',
         min=0,
         max=100,

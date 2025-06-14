@@ -202,7 +202,7 @@ class BDENTAL_OT_AssetBrowserToggle(bpy.types.Operator):
             # If the reference doesn't exist.
             params.asset_library_ref = 'LOCAL'           
 
-        params.import_type = 'APPEND'
+        # params.import_type = 'APPEND'
         self.can_update = True
         return None
 
@@ -1071,7 +1071,7 @@ class BDENTAL_OT_Dicom_Reader(bpy.types.Operator):
 
         return error_message
     
-    def extract_threshold_points(self, sitk_image, max_points):
+    def extract_threshold_points(self, sitk_image, max_points, sampling_method=BdentalConstants.PCD_SAMPLING_METHOD_GRID):
         """
         Extract physical coordinates and intensities from voxels > threshold.
         Automatically downsamples image to limit number of points.
@@ -1092,34 +1092,34 @@ class BDENTAL_OT_Dicom_Reader(bpy.types.Operator):
         pcd_threshold_min_255 = HuTo255(pcd_threshold_min)
         mask = sitk_image > pcd_threshold_min_255
         mask_array = sitk.GetArrayViewFromImage(mask)
+        indices = np.argwhere(mask_array > 0)
         point_count = int(mask_array.sum())
 
         # Step 2: Resize if needed
-        if point_count > max_points:
-            scale = (max_points / point_count) ** (1 / 3)
-            original_size = sitk_image.GetSize()
-            new_size = [max(1, int(sz * scale)) for sz in original_size]
+        if point_count > max_points and sampling_method == BdentalConstants.PCD_SAMPLING_METHOD_GRID :
+                bdental_log(["using grid sampling "])
+                scale = (max_points / point_count) ** (1 / 3)
+                original_size = sitk_image.GetSize()
+                new_size = [max(1, int(sz * scale)) for sz in original_size]
 
-            resampler = sitk.ResampleImageFilter()
-            resampler.SetSize(new_size)
-            new_spacing = [sp * osz / nsz for sp, osz, nsz in zip(sitk_image.GetSpacing(), original_size, new_size)]
-            resampler.SetOutputSpacing(new_spacing)
-            resampler.SetOutputOrigin(sitk_image.GetOrigin())
-            resampler.SetOutputDirection(sitk_image.GetDirection())
-            resampler.SetInterpolator(sitk.sitkLinear)
+                resampler = sitk.ResampleImageFilter()
+                resampler.SetSize(new_size)
+                new_spacing = [sp * osz / nsz for sp, osz, nsz in zip(sitk_image.GetSpacing(), original_size, new_size)]
+                resampler.SetOutputSpacing(new_spacing)
+                resampler.SetOutputOrigin(sitk_image.GetOrigin())
+                resampler.SetOutputDirection(sitk_image.GetDirection())
+                resampler.SetInterpolator(sitk.sitkLinear)
 
-            sitk_image = resampler.Execute(sitk_image)
-            mask = sitk_image > pcd_threshold_min_255
-            mask_array = sitk.GetArrayViewFromImage(mask)
+                sitk_image = resampler.Execute(sitk_image)
+                mask = sitk_image > pcd_threshold_min_255
+                mask_array = sitk.GetArrayViewFromImage(mask)
+                indices = np.argwhere(mask_array > 0)
 
-        # Step 3: Get voxel indices where mask > 0 (z, y, x)
-        indices = np.argwhere(mask_array > 0)
-
-        # Step 4: Get intensity values from image array
+        # Step 3:: Get intensity values from image array
         image_array = sitk.GetArrayViewFromImage(sitk_image)
         intensities = image_array[indices[:, 0], indices[:, 1], indices[:, 2]].astype(np.int32).ravel()
 
-        # Step 5: Convert to physical coordinates (vectorized)
+        # Step 4: Convert to physical coordinates (vectorized)
         spacing = np.array(sitk_image.GetSpacing())
         origin = np.array(sitk_image.GetOrigin())
         direction = np.array(sitk_image.GetDirection()).reshape(3, 3)
@@ -1127,6 +1127,14 @@ class BDENTAL_OT_Dicom_Reader(bpy.types.Operator):
         ijk = np.flip(indices, axis=1)         # (N, 3) in (x, y, z)
         ijk_spacing = ijk * spacing            # apply spacing
         coords = ijk_spacing @ direction.T + origin  # apply direction and origin
+
+        if point_count > max_points and sampling_method == BdentalConstants.PCD_SAMPLING_METHOD_RANDOM :
+            bdental_log(["using random sampling "])
+            random_indices = np.random.choice(point_count, max_points, replace=False)
+            coords = coords[random_indices]
+            intensities = intensities[random_indices]
+            
+        
 
         return coords, intensities
     
@@ -1216,7 +1224,8 @@ class BDENTAL_OT_Dicom_Reader(bpy.types.Operator):
         step = tpc()
         coords, intensities = self.extract_threshold_points(
             sitk_image=self.sitk_image,
-            max_points=max_points
+            max_points=max_points,
+            sampling_method = self._props.pcd_sampling_method
         )
         
         bdental_log([f" extract_threshold_points : {tpc() - step} seconds"])
@@ -1262,12 +1271,27 @@ class BDENTAL_OT_Dicom_Reader(bpy.types.Operator):
             pcd_obj.lock_location[i] = True
             pcd_obj.lock_rotation[i] = True
             pcd_obj.lock_scale[i] = True
+
         bpy.ops.object.select_all(action="DESELECT")
         pcd_obj.select_set(True)
         bpy.context.view_layer.objects.active = pcd_obj
 
+        #trigger update pcd options in UI panel:
         current_threshold = self._props.ThresholdMin
-        self._props.ThresholdMin = current_threshold #trigger update of threshold in UI
+        self._props.ThresholdMin = current_threshold 
+
+        current_pcd_point_radius = self._props.pcd_point_radius
+        self._props.pcd_point_radius = current_pcd_point_radius
+
+        current_pcd_point_auto_resize = self._props.pcd_point_auto_resize
+        self._props.pcd_point_auto_resize = current_pcd_point_auto_resize
+
+        current_pcd_points_opacity = self._props.pcd_points_opacity
+        self._props.pcd_points_opacity = current_pcd_points_opacity
+
+        current_pcd_points_emission = self._props.pcd_points_emission
+        self._props.pcd_points_emission = current_pcd_points_emission
+
         pcd_obj.data.update()
 
         bdental_log([f" point cloud creation : {tpc() - step} seconds"])
@@ -1276,7 +1300,7 @@ class BDENTAL_OT_Dicom_Reader(bpy.types.Operator):
         
         return error_message
 
-    def voxel_visualization (self,context):
+    def textured_visualization (self,context):
         error_message = []
         voxel_idx = get_incremental_idx(data=bpy.data.objects,bdental_type=BdentalConstants.VOXEL_OBJECT_TYPE)
         voxel_object_name = get_incremental_name(BdentalConstants.VOXEL_OBJECT_NAME,voxel_idx)
@@ -1482,9 +1506,9 @@ class BDENTAL_OT_Dicom_Reader(bpy.types.Operator):
         bpy.ops.wm.save_mainfile()
         # bdental_log([self.all_dicom_cach_dictionary])
         if self._props.visualisation_mode == BdentalConstants.VISUALISATION_MODE_TEXTURED:
-            error_message = self.voxel_visualization(context)
+            error_message = self.textured_visualization(context)
         elif self._props.visualisation_mode == BdentalConstants.VISUALISATION_MODE_PCD:
-            error_message = self.point_cloud_visualization(max_points=BdentalConstants.PCD_MAX_POINTS)
+            error_message = self.point_cloud_visualization(max_points=self._props.pcd_points_max)
 
         if error_message:
             BDENTAL_GpuDrawText(message_list=error_message, rect_color=BdentalColors.red, sleep_time=2)
@@ -10327,10 +10351,18 @@ class BDENTAL_OT_FilpCameraAxial90Plus(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_axial = [
-            obj for obj in bpy.data.objects if "_AXIAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "axial" in obj.name.lower()]
+        camera_axial = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
+
         bpy.ops.object.select_all(action='DESELECT')
         camera_axial.select_set(True)
         context.view_layer.objects.active = camera_axial
@@ -10374,10 +10406,18 @@ class BDENTAL_OT_FilpCameraAxial90Minus(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_axial = [
-            obj for obj in bpy.data.objects if "_AXIAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "axial" in obj.name.lower()]
+        camera_axial = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
+
         bpy.ops.object.select_all(action='DESELECT')
         camera_axial.select_set(True)
         context.view_layer.objects.active = camera_axial
@@ -10421,10 +10461,18 @@ class BDENTAL_OT_FilpCameraAxialUpDown(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_axial = [
-            obj for obj in bpy.data.objects if "_AXIAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "axial" in obj.name.lower()]
+        camera_axial = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
+
         bpy.ops.object.select_all(action='DESELECT')
         camera_axial.select_set(True)
         context.view_layer.objects.active = camera_axial
@@ -10468,10 +10516,18 @@ class BDENTAL_OT_FilpCameraAxialLeftRight(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_axial = [
-            obj for obj in bpy.data.objects if "_AXIAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "axial" in obj.name.lower()]
+        camera_axial = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
+
         bpy.ops.object.select_all(action='DESELECT')
         camera_axial.select_set(True)
         context.view_layer.objects.active = camera_axial
@@ -10515,10 +10571,18 @@ class BDENTAL_OT_FilpCameraCoronal90Plus(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_coronal = [
-            obj for obj in bpy.data.objects if "_CORONAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "coronal" in obj.name.lower()]
+        camera_coronal = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
+
         bpy.ops.object.select_all(action='DESELECT')
         camera_coronal.select_set(True)
         context.view_layer.objects.active = camera_coronal
@@ -10562,10 +10626,18 @@ class BDENTAL_OT_FilpCameraCoronal90Minus(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_coronal = [
-            obj for obj in bpy.data.objects if "_CORONAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "coronal" in obj.name.lower()]
+        camera_coronal = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
+        
         bpy.ops.object.select_all(action='DESELECT')
         camera_coronal.select_set(True)
         context.view_layer.objects.active = camera_coronal
@@ -10609,10 +10681,18 @@ class BDENTAL_OT_FilpCameraCoronalUpDown(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_coronal = [
-            obj for obj in bpy.data.objects if "_CORONAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "coronal" in obj.name.lower()]
+        camera_coronal = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
+        
         bpy.ops.object.select_all(action='DESELECT')
         camera_coronal.select_set(True)
         context.view_layer.objects.active = camera_coronal
@@ -10656,10 +10736,18 @@ class BDENTAL_OT_FilpCameraCoronalLeftRight(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_coronal = [
-            obj for obj in bpy.data.objects if "_CORONAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "coronal" in obj.name.lower()]
+        camera_coronal = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
+        
         bpy.ops.object.select_all(action='DESELECT')
         camera_coronal.select_set(True)
         context.view_layer.objects.active = camera_coronal
@@ -10703,10 +10791,18 @@ class BDENTAL_OT_FilpCameraSagittal90Plus(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_sagittal = [
-            obj for obj in bpy.data.objects if "_SAGITTAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "sagittal" in obj.name.lower()]
+        camera_sagittal = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
+        
         bpy.ops.object.select_all(action='DESELECT')
         camera_sagittal.select_set(True)
         context.view_layer.objects.active = camera_sagittal
@@ -10750,10 +10846,17 @@ class BDENTAL_OT_FilpCameraSagittal90Minus(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_sagittal = [
-            obj for obj in bpy.data.objects if "_SAGITTAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "sagittal" in obj.name.lower()]
+        camera_sagittal = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
 
         bpy.ops.object.select_all(action='DESELECT')
         camera_sagittal.select_set(True)
@@ -10798,10 +10901,17 @@ class BDENTAL_OT_FilpCameraSagittalUpDown(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_sagittal = [
-            obj for obj in bpy.data.objects if "_SAGITTAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "sagittal" in obj.name.lower()]
+        camera_sagittal = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
 
         bpy.ops.object.select_all(action='DESELECT')
         camera_sagittal.select_set(True)
@@ -10846,10 +10956,17 @@ class BDENTAL_OT_FilpCameraSagittalLeftRight(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         selected_objects = context.selected_objects
-        camera_sagittal = [
-            obj for obj in bpy.data.objects if "_SAGITTAL_SLICE_CAM" in obj.name][0]
-        slices_pointer = [
-            obj for obj in bpy.data.objects if "_SLICES_POINTER" in obj.name][0]
+        camera_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)== BdentalConstants.SLICE_CAM_TYPE\
+                    and "sagittal" in obj.name.lower()]
+        camera_sagittal = camera_checklist[0]
+
+        slices_pointer_checklist = [
+            obj for obj in context.scene.objects if \
+                obj.get(BdentalConstants.BDENTAL_TYPE_TAG)==BdentalConstants.SLICES_POINTER_TYPE]
+        
+        slices_pointer = slices_pointer_checklist[0]
 
         bpy.ops.object.select_all(action='DESELECT')
         camera_sagittal.select_set(True)
@@ -10906,10 +11023,14 @@ class BDENTAL_OT_FlipNormals(bpy.types.Operator):
     def execute(self, context):
         obj = context.object
         mode = obj.mode
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.flip_normals()
-        bpy.ops.object.mode_set(mode=mode)
+        if obj == 'EDIT' :
+            bpy.ops.mesh.flip_normals()
+        else :
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.select_all(action='SELECT')
+            bpy.ops.mesh.flip_normals()
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.object.mode_set(mode=mode)
         return{"FINISHED"}
 
 class BDENTAL_OT_SlicesPointerSelect(bpy.types.Operator):

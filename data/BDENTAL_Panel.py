@@ -110,15 +110,32 @@ class BDENTAL_PT_DicomPanel(bpy.types.Panel):
 
             split = box.split(factor=0.4, align=True)
             coll = split.column(align=True)
-            coll.label(text="Visualisation Options")
+            coll.label(text="Visualisation options:")
             coll = split.column(align=True)
             coll.prop(BDENTAL_Props, "visualisation_mode", text="")
+
+            if BDENTAL_Props.visualisation_mode == BdentalConstants.VISUALISATION_MODE_PCD :
+
+                split = box.split(factor=0.4, align=True)
+                coll = split.column(align=True)
+                coll.label(text="Point cloud sampling:")
+                coll = split.column(align=True)
+                coll.prop(BDENTAL_Props, "pcd_sampling_method", text="")
+
+                
+                split = box.split(factor=0.4, align=True)
+                coll = split.column(align=True)
+                coll.label(text="Points count max:")
+                coll = split.column(align=True)
+                coll.prop(BDENTAL_Props, "pcd_points_max", text="")
+
+            
             
             g = box.grid_flow(columns=1, align=False)
             g.operator("wm.bdental_dicom_reader", text="Read DICOM", icon="IMPORT")
             
             
-            
+            box = layout.box()
             if context.object and context.object.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.PCD_OBJECT_TYPE:
                 box = layout.box()
                 g = box.grid_flow(columns=1, align=True)
@@ -139,7 +156,8 @@ class BDENTAL_PT_DicomPanel(bpy.types.Panel):
                 g.prop(BDENTAL_Props, "ThresholdMin", text="threshold", slider=True)
                 
 
-            box.separator()
+            box = layout.box()
+            box.label(text="Mesh segmentation:")
 
             g = box.grid_flow(columns=2, align=True)
             g.prop(BDENTAL_Props, "SegmentColor", text="")
@@ -181,6 +199,8 @@ class BDENTAL_PT_SlicesPanel(bpy.types.Panel):
             row.operator("wm.bdental_volume_slicer",text="Update Dicom Slices", icon="EMPTY_AXIS")
             row.prop(BDENTAL_Props, "slicesColorThresholdBool", text="Slices Label")
 
+            row = box.row()
+            row.operator("wm.bdental_slices_pointer_select", text="Select Pointer", icon="EMPTY_AXIS")
                     
             row = box.row()
             row.alert = True 
