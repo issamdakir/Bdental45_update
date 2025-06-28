@@ -78,7 +78,7 @@ class BDENTAL_PT_MainPanel(bpy.types.Panel):
             g.operator("wm.bdental_import_mesh", icon="IMPORT")
             g.operator("wm.bdental_export_mesh", icon="EXPORT")
         
-        box = layout.box()
+        # box = layout.box()
         # box.operator("wm.bdental_connect_path_cutter")
         
 
