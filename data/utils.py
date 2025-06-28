@@ -20,10 +20,11 @@ from bpy.props import ( # type: ignore
 import gpu # type: ignore
 from gpu_extras.batch import batch_for_shader # type: ignore
 import blf # type: ignore
-from time import sleep
+from time import sleep, perf_counter
 import subprocess
 import platform
 import weakref
+
 
 def get_bdental_version(filepath=None):
     if filepath is None :
@@ -202,6 +203,10 @@ class BdentalConstants():
     SLICE_SEGMENT_COLOR_RATIO = 0.35
 
     BDENTAL_TEXT_3D_TYPE = "bdental_text_3d"
+    BDENTAL_TEXT_3D_MAT_NAME = "bdental_text_3d_mat"
+    BDENTAL_TEXT_3D_MAT_DIFFUSE_COLOR = [0, 0, 1, 1]
+
+
     BDENTAL_IMPLANT_TYPE = "bdental_implant"
     BDENTAL_IMPLANT_NAME_PREFFIX = "Bdental_Implant"
     BDENTAL_IMPLANT_COLLECTION_NAME = "Implant_Collection"
@@ -235,9 +240,38 @@ class BdentalConstants():
     PCD_SAMPLING_METHOD_GRID = "Grid sampling"
     PCD_SAMPLING_METHOD_RANDOM = "Random sampling"
 
+    CUTTERS_COLL_NAME = "Bdental Cutters"
+    CONNECT_PATH_CUTTER_NAME = "Connected path cutter"
+    CONNECT_PATH_CUTTER_TYPE = "connected_path_cutter"
+    CONNECT_PATH_CUTTER_MAT = {
+        "name" : "connected_path_cutter_mat",
+        "diffuse_color" : [0.1, 0.4, 0.7, 1.0],
+        "roughness" : 0.3
+        }
+
 
     LOCKED_TO_POINTER_MAT_NAME = "bdental_locked_to_pointer_mat"
     PREVIOUS_ACTIVE_MAT_NAME_TAG = "bdental_previous_mat"
+
+class TimerLogger:
+    def __init__(self, label=""):
+        self.label = label
+        self.start_time = perf_counter()
+        self.last_time = self.start_time
+        print(f"[{self.label}] Start")
+
+    def log(self, step_name=""):
+        now = perf_counter()
+        step_elapsed = now - self.last_time
+        total_elapsed = now - self.start_time
+
+        print(f"[{self.label}] Step: {step_name} | +{step_elapsed:.6f}s | Total: {total_elapsed:.6f}s")
+        self.last_time = now
+
+    def end(self):
+        now = perf_counter()
+        total_elapsed = now - self.start_time
+        print(f"[{self.label}] End | Total elapsed: {total_elapsed:.6f}s")
 
 class BDENTAL_OT_MessageBox(bpy.types.Operator):
     """Bdental popup message"""
@@ -328,6 +362,7 @@ DRAW_HANDLERS=[]
 
 #Utils :
 ####################################################################################################
+
 def clear_terminal():
     os.system("cls") if os.name == "nt" else os.system("clear")
 
@@ -719,6 +754,7 @@ class BDENTAL_GpuDrawText() :
             bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1) 
 
         if self.message_list:
+            self._cancell_previous()
             self.gpu_info_footer()
             DRAW_HANDLERS.append(self.info_handler)
             bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1)  
@@ -727,9 +763,11 @@ class BDENTAL_GpuDrawText() :
                 sleep(self.sleep_time)
                 self._cancell_previous()
                 bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1) 
-        # else :
-        #     self._cancell_previous()
-        #     bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1) 
+        else :
+            if self.remove_handlers:
+                self._cancell_previous()
+                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1) 
+            
 
         # bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP',iterations=1) 
     def _cancell_previous(self):

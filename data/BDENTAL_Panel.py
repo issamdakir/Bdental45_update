@@ -65,8 +65,9 @@ class BDENTAL_PT_MainPanel(bpy.types.Panel):
             
         else :
             box = layout.box()
-            g = box.grid_flow(columns=1, align=True)
+            g = box.grid_flow(columns=2, align=True)
             g.operator("wm.open_mainfile")
+            g.operator("wm.bdental_reload_startup")
 
             g = box.grid_flow(columns=2, align=True)
             g.alert = save_alert
@@ -76,6 +77,10 @@ class BDENTAL_PT_MainPanel(bpy.types.Panel):
             g = box.grid_flow(columns=2, align=True)
             g.operator("wm.bdental_import_mesh", icon="IMPORT")
             g.operator("wm.bdental_export_mesh", icon="EXPORT")
+        
+        box = layout.box()
+        # box.operator("wm.bdental_connect_path_cutter")
+        
 
 class BDENTAL_PT_DicomPanel(bpy.types.Panel):
     """Dicom Panel"""
@@ -427,6 +432,7 @@ class BDENTAL_PT_ToolsPanel(bpy.types.Panel):
             grid = box.grid_flow(columns=2, align=True)
             grid.prop(BDENTAL_Props, "text", text="")
             grid.operator("wm.bdental_add_3d_text", text="Add 3D Text")
+            # box.operator("wm.bdental_text3d", text="Add 3D Text(experimental)")
 
 class BDENTAL_PT_ImplantPanel(bpy.types.Panel):
     """ Implant panel"""

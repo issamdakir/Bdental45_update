@@ -1,3 +1,4 @@
+from email.policy import default
 import os
 import shutil
 import shlex
@@ -20,7 +21,7 @@ import blf # type: ignore
 import bpy # type: ignore
 import bpy_extras # type: ignore
 from bpy.app.handlers import persistent # type: ignore
-from mathutils import Matrix, Vector, Euler, kdtree # type: ignore
+from mathutils import Matrix, Vector, Euler, kdtree , bvhtree# type: ignore
 from bpy.props import ( # type: ignore
     StringProperty,
     IntProperty,
@@ -138,6 +139,7 @@ from ..utils import (
     remove_handlers_by_names,
     add_handlers_from_func_list,
     HuTo255,
+    TimerLogger,
 )
 MC = {}
 IMAGE3D = None
@@ -664,6 +666,211 @@ class BDENTAL_OT_add_3d_text(bpy.types.Operator):
         # context.view_layer.objects.active = self.target
         # context.scene.BDENTAL_Props.text = "BDental"
 
+class BDENTAL_OT_Text3d(bpy.types.Operator):
+    """knife project 3d text on mesh"""
+
+    bl_idname = "wm.bdental_text3d"
+    bl_label = "Text 3D"
+    bl_options = {"REGISTER", "UNDO"}
+
+    text_color = [0.0, 0.0, 1.0, 1.0]
+    text_body : StringProperty(
+        name="Text",
+        description="text content",
+        default="Bdental",
+    ) # type: ignore
+    font_size = 3.5
+    space_character = 1.3
+    text_offset = 5
+
+    text_mode: EnumProperty(
+        items=set_enum_items(["Embossed", "Engraved"]),
+        name="Text Mode",
+        default="Embossed",
+    ) # type: ignore
+
+    extrusion_value: FloatProperty(
+        name="Text depth",
+        description="Value for extrusion along the normal",
+        default=0.5,
+        min=0.0,
+        max=10.0,
+        subtype="DISTANCE"
+    ) # type: ignore
+
+    @classmethod
+    def poll(cls, context):
+
+        target = context.object and context.object.select_get(
+        ) and context.object.type == "MESH"
+        return target
+
+    def add_text(self, context):
+
+        bpy.ops.object.text_add(enter_editmode=False, align='CURSOR')
+        self.text_obj = context.object
+        text_obj_idx = get_incremental_idx(data=bpy.data.objects,bdental_type=BdentalConstants.BDENTAL_TEXT_3D_TYPE)
+        text_obj_name = get_incremental_name("Text3d",text_obj_idx)
+        self.text_obj.name = text_obj_name
+        self.text_obj[BdentalConstants.BDENTAL_TYPE_TAG] = BdentalConstants.BDENTAL_TEXT_3D_TYPE
+
+        self.text_obj.data.body = self.text_body
+    
+        self.text_obj.data.size = self.font_size
+        self.text_obj.data.space_character = self.space_character
+        self.text_obj.data.align_x = 'CENTER'
+
+        mat_name = BdentalConstants.BDENTAL_TEXT_3D_MAT_NAME
+        diffuse_color =  BdentalConstants.BDENTAL_TEXT_3D_MAT_DIFFUSE_COLOR
+        mat = bpy.data.materials.get(mat_name) or bpy.data.materials.new(mat_name)
+        mat.diffuse_color = diffuse_color
+        self.text_obj.active_material = mat
+
+
+    
+    
+    def set_text_position(self, context):
+        cursor = context.scene.cursor
+        self.text_obj.matrix_world[:3] = cursor.matrix[:3]
+        translate_local(self.text_obj, self.text_offset, axis='Z')
+        self.Z = Vector(cursor.matrix.col[2][:3]).normalized()
+        override, area3D, space3D, region3D = context_override(context)
+        r3d = space3D.region_3d
+        self.view_mtx = r3d.view_matrix
+
+        return
+    
+    def finalize(self, context):
+        
+
+        if not context.object :
+            context.view_layer.objects.active = self.target
+
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.select_all(action='DESELECT')
+        self.target.select_set(True)
+        self.text_obj.select_set(True)
+        context.view_layer.objects.active = self.target
+
+        override, area3D, space3D, region3D = context_override(context)
+        r3d = space3D.region_3d
+        r3d.view_matrix = self.view_mtx 
+        bpy.ops.object.mode_set(mode='EDIT')
+        with bpy.context.temp_override(**override):
+            bpy.ops.mesh.knife_project()
+
+        if self.text_mode == "Embossed":
+            self.extrusion_value = abs(self.extrusion_value)
+        else :
+            self.extrusion_value = - abs(self.extrusion_value)
+
+        cursor = context.scene.cursor
+        extrusion_vector = self.target.matrix_world.inverted() @ Vector(cursor.matrix.col[2][:3]).normalized() * self.extrusion_value
+
+        bpy.ops.mesh.extrude_region_move()
+        # bpy.ops.object.mode_set(mode='OBJECT')
+        # for v in self.target.data.vertices :
+        #     if v.select :
+        #         v.co += extrusion_vector
+        bpy.ops.transform.translate(value=extrusion_vector)
+        print(f"extrusion vector : {extrusion_vector}")
+        # bpy.ops.mesh.extrude_region_move(
+        #     TRANSFORM_OT_translate={
+        #         "value": self.Z * self.extrusion_value,
+        #     }
+        # )
+        # bpy.ops.mesh.extrude_region_move(
+        #     MESH_OT_extrude_region={
+        #         "use_normal_flip": False,
+        #         "use_dissolve_ortho_edges": False,
+        #         "mirror": False
+        #     },
+        #     TRANSFORM_OT_translate={
+        #         "value": (0, 0, self.extrusion_value),
+        #         "orient_type": 'NORMAL'
+        #     }
+        # )
+        bpy.ops.object.mode_set(mode='OBJECT')
+        try:
+            bpy.data.objects.remove(self.text_obj)
+        except:
+            pass
+
+        bpy.ops.object.select_all(action="DESELECT")
+        self.target.select_set(True)
+        context.view_layer.objects.active = self.target
+
+        return
+    
+    def invoke(self, context, event):
+        self.target = context.object
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self)
+    
+    def execute(self, context):
+        
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+        self.target.select_set(True)
+        context.view_layer.objects.active = self.target
+
+        override, area3D, space3D, region3D = context_override(context)
+        with bpy.context.temp_override(**override):
+            bpy.ops.wm.tool_set_by_id( name="builtin.cursor")
+        
+        # self.add_text(context)
+
+        txt = ["Mouse left : Set text location","TAB : Edit text", "ESC : Cancell operation", "ENTER : Finalise"]
+        BDENTAL_GpuDrawText(txt)
+
+        self.text_added = False
+
+        wm = context.window_manager
+        wm.modal_handler_add(self)
+        
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        if not event.type in {"RET", "ESC", "LEFTMOUSE"}:
+            return {'PASS_THROUGH'}
+        
+        elif event.type in {'ESC'}:
+            try:
+                bpy.data.objects.remove(self.text_obj)
+            except:
+                pass
+            override, area3D, space3D, region3D = context_override(context)
+            with bpy.context.temp_override(**override):
+                bpy.ops.wm.tool_set_by_id( name="builtin.select")
+            BDENTAL_GpuDrawText(message_list=["Cancelled."],rect_color=BdentalColors.red,sleep_time=1 )
+            return {'CANCELLED'}
+        elif event.type == "LEFTMOUSE" :
+            if event.value == "PRESS":
+                return {'PASS_THROUGH'}
+            elif event.value == "RELEASE":
+                if not self.text_added:
+                    self.add_text(context)
+                    self.text_added = True
+
+                if context.object and context.mode == "OBJECT" :
+                    self.set_text_position(context)
+                    return {'RUNNING_MODAL'}
+                else :
+                    return {'PASS_THROUGH'}
+
+        elif event.type == 'RET' and event.value == "PRESS":
+            if context.object and context.mode == "OBJECT" :
+                BDENTAL_GpuDrawText(["3D Text processing..."])
+                self.finalize(context)
+                override, area3D, space3D, region3D = context_override(context)
+                with bpy.context.temp_override(**override):
+                    bpy.ops.wm.tool_set_by_id( name="builtin.select")
+                BDENTAL_GpuDrawText(message_list=["Finished."],rect_color=BdentalColors.green,sleep_time=1 )
+                return {'FINISHED'}
+            else :
+                return {'PASS_THROUGH'}
+        return {'RUNNING_MODAL'}
+
 class BDENTAL_OT_OpenManual(bpy.types.Operator):
     """Open BDENTAL Manual"""
 
@@ -683,6 +890,17 @@ class BDENTAL_OT_OpenManual(bpy.types.Operator):
                 "INVOKE_DEFAULT", message=str(message), icon=icon
             )
             return {"CANCELLED"}
+
+class BDENTAL_OT_ReloadStartup(bpy.types.Operator):
+    """reload startup file"""
+
+    bl_idname = "wm.bdental_reload_startup"
+    bl_label = "Reload Startup"
+
+    def execute(self, context):
+        bpy.ops.wm.read_homefile("INVOKE_DEFAULT")  
+        return {"FINISHED"}
+
 class BDENTAL_OT_NewProject(bpy.types.Operator):
     """Save current project if not saved"""
 
@@ -693,9 +911,9 @@ class BDENTAL_OT_NewProject(bpy.types.Operator):
     
     def defer(self):
         if not bpy.data.filepath:
-            print("loop...")
+            # print("loop...")
             return 1
-        print("end loop")
+        # print("end loop")
         self.can_resume = True
         return None
     
@@ -703,7 +921,7 @@ class BDENTAL_OT_NewProject(bpy.types.Operator):
         if self.can_resume :
             _props = bpy.context.scene.BDENTAL_Props
             project_dir = dirname(AbsPath(bpy.data.filepath))
-            print(f"project abspath = {project_dir}")
+            # print(f"project abspath = {project_dir}")
             try :
                 _props.UserProjectDir = RelPath(project_dir)
             except:
@@ -12152,6 +12370,891 @@ class BDENTAL_OT_CleanMeshIterative(bpy.types.Operator):
         wm = context.window_manager
         return wm.invoke_props_dialog(self)
 
+class BDENTAL_OT_ConnectPathCutter(bpy.types.Operator):
+    """mesh curve cutter tool"""
+
+    bl_idname = "wm.bdental_connect_path_cutter"
+    bl_label = "Path cutter"
+    bl_options = {"REGISTER", "UNDO"}
+
+    Resolution : IntProperty(default=2) # type: ignore
+    closeCurve = True
+    radius = 3
+    curve_res = 2
+
+    @classmethod
+    def poll(cls, context):
+
+        base_mesh = context.object and context.object.select_get(
+        ) and context.object.type == "MESH"
+        return base_mesh
+    
+    def resample_loop_evenly_np(self, loop_obj, spacing_mm=1):
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        eval_obj = loop_obj.evaluated_get(depsgraph)
+
+        # Convert evaluated curve to mesh
+        mesh = eval_obj.to_mesh()
+
+        # Get vertices as Nx3 NumPy array in world space
+        verts_world = np.array([eval_obj.matrix_world @ v.co for v in mesh.vertices])
+        edges = [(e.vertices[0], e.vertices[1]) for e in mesh.edges]
+
+        # Reorder points to a continuous polyline (greedy walk)
+        edge_map = {}
+        for a, b in edges:
+            edge_map.setdefault(a, []).append(b)
+            edge_map.setdefault(b, []).append(a)
+
+        ordered = [0]
+        visited = {0}
+        while True:
+            last = ordered[-1]
+            neighbors = edge_map.get(last, [])
+            nexts = [n for n in neighbors if n not in visited]
+            if not nexts:
+                break
+            nxt = nexts[0]
+            ordered.append(nxt)
+            visited.add(nxt)
+
+        points = verts_world[ordered]  # (N, 3)
+
+        # Compute segment lengths and total distance
+        deltas = np.diff(points, axis=0)
+        seg_lengths = np.linalg.norm(deltas, axis=1)
+        distances = np.concatenate([[0], np.cumsum(seg_lengths)])
+        total_length = distances[-1]
+
+        # Determine resampling points
+        num_samples = int(np.ceil(total_length / spacing_mm)) + 1
+        target_distances = np.linspace(0, total_length, num_samples)
+
+        # Interpolate resampled points
+        resampled = []
+        i = 0
+        for td in target_distances:
+            while i < len(distances) - 2 and distances[i + 1] < td:
+                i += 1
+            d1, d2 = distances[i], distances[i + 1]
+            p1, p2 = points[i], points[i + 1]
+            t = (td - d1) / (d2 - d1) if d2 > d1 else 0
+            interp_point = p1 + t * (p2 - p1)
+            resampled.append(interp_point)
+
+        eval_obj.to_mesh_clear()
+        return np.array(resampled)  # shape (M, 3)
+    
+ 
+    def perform_cut(self, context):
+        timer = TimerLogger("Path cutter perform cut")
+        override, area3D, space3D, region3D = context_override(context)
+        with bpy.context.temp_override(**override):
+            bpy.ops.wm.tool_set_by_id( name="builtin.select")
+            bpy.ops.view3d.snap_cursor_to_center()
+            space3D.overlay.show_outline_selected = True
+            context.scene.tool_settings.use_snap = False
+
+        if not context.object :
+            context.view_layer.objects.active = self.cutter
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action='DESELECT')
+        self.cutter.select_set(True)
+        context.view_layer.objects.active = self.cutter
+
+        hide_object(False, self.cutter)
+
+        if self.closeCurve :
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.curve.cyclic_toggle()
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+        message = ["processing..."]
+        BDENTAL_GpuDrawText(message)
+
+        self.cutter.data.bevel_depth = 0
+        self.cutter.data.resolution_u = self.Resolution
+        self.shrinkwrap.offset = 0.2
+
+        bpy.ops.object.modifier_apply(modifier="Shrinkwrap")
+        bpy.ops.object.material_slot_remove_all()
+        bpy.ops.object.convert(target="MESH")
+
+        cutter = context.object
+        target = self.base_mesh
+
+        
+        
+        bpy.ops.object.select_all(action="DESELECT")
+        target.select_set(True)
+        context.view_layer.objects.active = target
+
+        bpy.ops.object.mode_set(mode='EDIT')
+        context.tool_settings.mesh_select_mode = (True, False, False)
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        depsgraph = context.evaluated_depsgraph_get()
+        eval_target = target.evaluated_get(depsgraph)
+        eval_mesh = eval_target.to_mesh()
+
+
+        # Build KDTree from face centers
+        # bm_eval = bmesh.new()
+        # bm_eval.from_mesh(eval_mesh)
+        # bm_eval.faces.ensure_lookup_table()
+        bm = bmesh.new()
+        bm.from_mesh(eval_mesh)
+
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+
+        timer.log("Preparation step complete")
+
+        face_tree = kdtree.KDTree(len(bm.faces))
+        for i, face in enumerate(bm.faces):
+            center = face.calc_center_median()
+            face_tree.insert(center, i)
+        face_tree.balance()
+
+        timer.log("KDTree step complete")
+        # cutter_world_verts = self.resample_loop_evenly_np(cutter)
+
+        cutter_world_verts = [cutter.matrix_world @ v.co for v in cutter.data.vertices]
+        # bm = bmesh.new()
+        # bm.from_mesh(eval_mesh)
+
+        projected_verts = []
+        projected_world_coords = []
+        failed_find_range = 0
+        failed_projection = 0
+
+        # bm.verts.ensure_lookup_table()
+        # bm.edges.ensure_lookup_table()
+        # bm.faces.ensure_lookup_table()
+        n = len(cutter_world_verts)
+        timer.log("Finding hits start")
+        for i in range(n):
+            pt = Vector(cutter_world_verts[i])
+            # bm.verts.ensure_lookup_table()
+            # bm.edges.ensure_lookup_table()
+            bm.faces.ensure_lookup_table()
+            found = face_tree.find_range(pt, self.radius)
+            if not found:
+                failed_find_range+=1
+                continue
+
+            # Compute average normal
+            normals = [bm.faces[i].normal for (_, i, _) in found]
+            avg_normal = sum(normals, Vector()) / len(normals)
+            avg_normal.normalize()
+
+            ray_origin = pt + avg_normal 
+            ray_origin_local = eval_target.matrix_world.inverted() @ ray_origin
+
+            ray_dir = avg_normal
+            ray_dir_inverse = -avg_normal
+            
+
+            result, hit_loc, hit_normal, face_idx = eval_target.ray_cast(ray_origin_local, ray_dir)
+            result_inverse, hit_loc_inverse, hit_normal_inverse, face_idx_inverse = eval_target.ray_cast(ray_origin_local, ray_dir_inverse)
+            if not result and not result_inverse:
+                failed_projection+=1
+                continue
+            elif result and not result_inverse:
+                _loc = hit_loc
+                fid = face_idx
+            elif not result and result_inverse:
+                _loc = hit_loc_inverse
+                fid = face_idx_inverse
+            else :
+                dist1 = (hit_loc - ray_origin_local).length if face_idx != -1 else float('inf')
+                dist2 = (hit_loc_inverse - ray_origin_local).length if face_idx_inverse != -1 else float('inf')
+                if dist1 < dist2:
+                    _loc = hit_loc
+                    fid = face_idx
+                elif dist2 < float('inf'):
+                    _loc = hit_loc_inverse
+                    fid = face_idx_inverse
+                else :
+                    failed_projection+=1
+                    continue
+
+            face = bm.faces[fid]
+            verts = list(face.verts)
+
+            # Delete original face
+            bmesh.ops.delete(bm, geom=[face], context='FACES')
+            # Insert projected vertex
+            new_vert = bm.verts.new(_loc)
+            for i in range(len(verts)):
+                v1 = verts[i]
+                v2 = verts[(i + 1) % len(verts)]
+                try:
+                    bm.faces.new([v1, v2, new_vert])
+                except ValueError:
+                    pass  # skip if face already exists
+            bm.verts.index_update()
+            projected_verts.append(new_vert)
+            projected_world_coords.append(eval_target.matrix_world @ new_vert.co.copy())
+            txt = f"Find hit {i} done"
+            timer.log(txt)
+            # BDENTAL_GpuDrawText(message)
+
+        # timer.log("projection of vertices step complete")
+        bdental_log([
+            f"num points = {len(cutter_world_verts)}",
+            f"failed find range = {failed_find_range}",
+            f"failed projections = {failed_projection}"
+            ])
+
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+
+        pairs = list(zip(projected_verts, projected_verts[1:]+[projected_verts[0]]))
+        if not self.closeCurve :
+            pairs = pairs[:-1]
+        good_pairs = []
+        for p in pairs:
+            if p[0] != p[1]:
+                good_pairs.append(p)  
+        
+        for v in bm.verts:
+            v.select = False
+        for e in bm.edges:
+            e.select = False
+        
+        n = len(pairs)
+        for i, [v1, v2] in enumerate(pairs):
+            bm.verts.ensure_lookup_table()
+            percentage = i*100/n 
+            if percentage == 100 : percentage == 97
+            
+            result = bmesh.ops.connect_vert_pair(bm, verts=[v1, v2])
+            new_edges = result.get('edges', [])
+            if not new_edges :
+                bdental_log([f"failed new edges = {i}"])
+                continue
+            for e in result.get("edges"):
+                e.select = True
+        
+            if percentage :
+                message = [f"processing...{int(percentage)}%"]
+                BDENTAL_GpuDrawText(message, percentage=percentage)
+
+        # cut_verts_ids = [v.index for v in bm.verts if v.select]
+        timer.log("connect paths step complete")
+
+
+
+        bm.to_mesh(target.data)
+        bm.free()
+        # bm_eval.free()
+        
+        eval_target.to_mesh_clear()
+        bpy.context.view_layer.update()
+        bpy.ops.object.mode_set(mode='EDIT')
+        context.tool_settings.mesh_select_mode = (True, False, False)
+        bpy.ops.mesh.edge_split(type='VERT')
+        # bpy.ops.mesh.select_mode(type="EDGE")
+        # bpy.ops.mesh.edge_split(type='EDGE')
+        # bpy.ops.object.mode_set( mode="OBJECT")
+        bpy.ops.wm.bdental_separate_objects(
+            "EXEC_DEFAULT", SeparateMode="Loose Parts")
+        
+       
+
+        bpy.data.objects.remove(cutter)
+        coll = bpy.data.collections.get(BdentalConstants.CUTTERS_COLL_NAME)
+        if coll :
+            bpy.data.collections.remove(coll)
+
+        BDENTAL_GpuDrawText()
+
+        timer.log("Separate step complete")
+        
+        return
+    
+
+    def perform_cut_bvhtree(self, context):
+        timer = TimerLogger("Path cutter perform cut")
+        override, area3D, space3D, region3D = context_override(context)
+        with bpy.context.temp_override(**override):
+            bpy.ops.wm.tool_set_by_id( name="builtin.select")
+            bpy.ops.view3d.snap_cursor_to_center()
+            space3D.overlay.show_outline_selected = True
+            context.scene.tool_settings.use_snap = False
+
+        if not context.object :
+            context.view_layer.objects.active = self.cutter
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action='DESELECT')
+        self.cutter.select_set(True)
+        context.view_layer.objects.active = self.cutter
+
+        hide_object(False, self.cutter)
+
+        if self.closeCurve :
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.curve.cyclic_toggle()
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+        message = ["processing..."]
+        BDENTAL_GpuDrawText(message)
+
+        self.cutter.data.bevel_depth = 0
+        self.cutter.data.resolution_u = self.Resolution
+        self.shrinkwrap.offset = 0.2
+
+        bpy.ops.object.modifier_apply(modifier="Shrinkwrap")
+        bpy.ops.object.material_slot_remove_all()
+        bpy.ops.object.convert(target="MESH")
+
+        cutter = context.object
+        target = self.base_mesh
+
+        
+        
+        bpy.ops.object.select_all(action="DESELECT")
+        target.select_set(True)
+        context.view_layer.objects.active = target
+
+        bpy.ops.object.mode_set(mode='EDIT')
+        context.tool_settings.mesh_select_mode = (True, False, False)
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        depsgraph = context.evaluated_depsgraph_get()
+        eval_target = target.evaluated_get(depsgraph)
+        eval_mesh = eval_target.to_mesh()
+
+
+        # Build KDTree from face centers
+        bm = bmesh.new()
+        bm.from_mesh(eval_mesh)
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+
+        timer.log("Preparation step complete")
+        _tree = bvhtree.BVHTree.FromBMesh(bm)
+
+        # face_tree = kdtree.KDTree(len(bm_eval.faces))
+        # for i, face in enumerate(bm_eval.faces):
+        #     center = face.calc_center_median()
+        #     face_tree.insert(center, i)
+        # face_tree.balance()
+
+        timer.log("KDTree step complete")
+        # cutter_world_verts = self.resample_loop_evenly_np(cutter)
+
+        cutter_world_verts = [cutter.matrix_world @ v.co for v in cutter.data.vertices]
+        
+
+        projected_verts = []
+        projected_world_coords = []
+        failed_find_range = 0
+        failed_projection = 0
+
+        
+        n = len(cutter_world_verts)
+        timer.log("Finding hits start")
+        for i in range(n):
+            bm.faces.ensure_lookup_table()
+            pt_local = target.matrix_world.inverted() @ Vector(cutter_world_verts[i])
+            # bm.verts.ensure_lookup_table()
+            # bm.edges.ensure_lookup_table()
+            
+            # _tree = bvhtree.BVHTree.FromBMesh(bm)
+            hits = _tree.find_nearest_range(pt_local, self.radius)
+            if not hits:
+                failed_find_range+=1
+                continue
+
+            # Compute average normal
+            normals = [normal for (position, normal, index, distance) in hits]
+            avg_normal = sum(normals, Vector()) / len(normals)
+            avg_normal.normalize()
+
+            ray_origin_local = pt_local + avg_normal 
+            
+
+            ray_dir = avg_normal
+            ray_dir_inverse = -avg_normal
+            
+
+            result, hit_loc, hit_normal, face_idx = eval_target.ray_cast(ray_origin_local, ray_dir)
+            result_inverse, hit_loc_inverse, hit_normal_inverse, face_idx_inverse = eval_target.ray_cast(ray_origin_local, ray_dir_inverse)
+            if not result and not result_inverse:
+                failed_projection+=1
+                continue
+            elif result and not result_inverse:
+                _loc = hit_loc
+                fid = face_idx
+            elif not result and result_inverse:
+                _loc = hit_loc_inverse
+                fid = face_idx_inverse
+            else :
+                dist1 = (hit_loc - ray_origin_local).length if face_idx != -1 else float('inf')
+                dist2 = (hit_loc_inverse - ray_origin_local).length if face_idx_inverse != -1 else float('inf')
+                if dist1 < dist2:
+                    _loc = hit_loc
+                    fid = face_idx
+                elif dist2 < float('inf'):
+                    _loc = hit_loc_inverse
+                    fid = face_idx_inverse
+                else :
+                    failed_projection+=1
+                    continue
+
+            face = bm.faces[fid]
+            verts = list(face.verts)
+
+            # Delete original face
+            bmesh.ops.delete(bm, geom=[face], context='FACES')
+            # Insert projected vertex
+            new_vert = bm.verts.new(_loc)
+            for i in range(len(verts)):
+                v1 = verts[i]
+                v2 = verts[(i + 1) % len(verts)]
+                try:
+                    bm.faces.new([v1, v2, new_vert])
+                except ValueError:
+                    pass  # skip if face already exists
+            bm.verts.index_update()
+            projected_verts.append(new_vert)
+            projected_world_coords.append(eval_target.matrix_world @ new_vert.co.copy())
+            txt = f"Find hit {i} done"
+            timer.log(txt)
+            # BDENTAL_GpuDrawText(message)
+
+        # timer.log("projection of vertices step complete")
+        bdental_log([
+            f"num points = {len(cutter_world_verts)}",
+            f"failed find range = {failed_find_range}",
+            f"failed projections = {failed_projection}"
+            ])
+
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+
+        pairs = list(zip(projected_verts, projected_verts[1:]+[projected_verts[0]]))
+        if not self.closeCurve :
+            pairs = pairs[:-1]
+        good_pairs = []
+        for p in pairs:
+            if p[0] != p[1]:
+                good_pairs.append(p)  
+        
+        for v in bm.verts:
+            v.select = False
+        for e in bm.edges:
+            e.select = False
+        
+        n = len(pairs)
+        for i, [v1, v2] in enumerate(pairs):
+            bm.verts.ensure_lookup_table()
+            percentage = i*100/n 
+            if percentage == 100 : percentage == 97
+            
+            result = bmesh.ops.connect_vert_pair(bm, verts=[v1, v2])
+            new_edges = result.get('edges', [])
+            if not new_edges :
+                bdental_log([f"failed new edges = {i}"])
+                continue
+            for e in result.get("edges"):
+                e.select = True
+        
+            if percentage :
+                message = [f"processing...{int(percentage)}%"]
+                BDENTAL_GpuDrawText(message, percentage=percentage)
+
+        # cut_verts_ids = [v.index for v in bm.verts if v.select]
+        timer.log("connect paths step complete")
+
+
+
+        bm.to_mesh(target.data)
+        bm.free()
+        
+        
+        eval_target.to_mesh_clear()
+        bpy.context.view_layer.update()
+        bpy.ops.object.mode_set(mode='EDIT')
+        context.tool_settings.mesh_select_mode = (True, False, False)
+        bpy.ops.mesh.edge_split(type='VERT')
+        # bpy.ops.mesh.select_mode(type="EDGE")
+        # bpy.ops.mesh.edge_split(type='EDGE')
+        # bpy.ops.object.mode_set( mode="OBJECT")
+        bpy.ops.wm.bdental_separate_objects(
+            "EXEC_DEFAULT", SeparateMode="Loose Parts")
+        
+       
+
+        bpy.data.objects.remove(cutter)
+        coll = bpy.data.collections.get(BdentalConstants.CUTTERS_COLL_NAME)
+        if coll :
+            bpy.data.collections.remove(coll)
+
+        BDENTAL_GpuDrawText()
+
+        timer.log("Separate step complete")
+        
+        return
+    
+
+    def add_curve_cutter(self, context):
+
+        override, area3D, space3D, region3D = context_override(context)
+        context.scene.tool_settings.use_snap = True
+        context.scene.tool_settings.snap_elements = {"FACE"}
+
+        bpy.ops.curve.primitive_bezier_curve_add(radius=1, enter_editmode=False, align="CURSOR")
+        self.cutter = context.object
+        MoveToCollection(self.cutter, BdentalConstants.CUTTERS_COLL_NAME)
+        hide_collection(False, BdentalConstants.CUTTERS_COLL_NAME)
+
+        bpy.ops.object.select_all(action="DESELECT")
+        self.cutter.select_set(True)
+        context.view_layer.objects.active = self.cutter
+
+        cutter_idx = get_incremental_idx(data=bpy.data.objects,bdental_type=BdentalConstants.CONNECT_PATH_CUTTER_TYPE)
+        cutter_name = get_incremental_name(BdentalConstants.CONNECT_PATH_CUTTER_NAME,cutter_idx)
+        self.cutter.name = cutter_name
+        # self.cutter[BdentalConstants.BDENTAL_TYPE_TAG] = BdentalConstants.CONNECT_PATH_CUTTER_TYPE
+        # self.cutter["bdental_target"] = self.base_mesh.name
+        # self.cutter["bdental_close_curve"] = self.closeCurve
+
+        # CurveCutter settings :
+        bpy.ops.object.mode_set( mode="EDIT")
+        bpy.ops.curve.select_all( action="DESELECT")
+        self.cutter.data.splines[0].bezier_points[-1].select_control_point = True
+        bpy.ops.curve.dissolve_verts()
+        bpy.ops.curve.select_all( action="SELECT")
+        bpy.ops.view3d.snap_selected_to_cursor( use_offset=False)
+
+        self.cutter.data.bevel_depth = 0.1
+
+        mat = bpy.data.materials.get(
+            BdentalConstants.CONNECT_PATH_CUTTER_MAT.get("name")
+        ) or bpy.data.materials.new(BdentalConstants.CONNECT_PATH_CUTTER_MAT.get("name"))
+        mat.diffuse_color = BdentalConstants.CONNECT_PATH_CUTTER_MAT.get("diffuse_color")
+        mat.roughness = BdentalConstants.CONNECT_PATH_CUTTER_MAT.get("roughness")
+        
+        self.cutter.active_material = mat
+    
+        
+        with bpy.context.temp_override(**override):
+            bpy.ops.wm.tool_set_by_id( name="builtin.cursor")
+
+        space3D.overlay.show_outline_selected = False
+        self.shrinkwrap = self.cutter.modifiers.new(name="Shrinkwrap", type="SHRINKWRAP")
+        self.shrinkwrap.target = self.base_mesh
+        self.shrinkwrap.wrap_mode = "ABOVE_SURFACE"
+        self.shrinkwrap.use_apply_on_spline = True
+        
+    def add_cutter_point(self, context):
+
+        bpy.ops.object.mode_set( mode="EDIT")
+        bpy.ops.curve.extrude( mode="INIT")
+        bpy.ops.view3d.snap_selected_to_cursor( use_offset=False)
+        bpy.ops.curve.select_all( action="SELECT")
+        bpy.ops.curve.handle_type_set( type="AUTOMATIC")
+        bpy.ops.curve.select_all( action="DESELECT")
+        bpy.ops.object.mode_set( mode="OBJECT")
+        points = self.cutter.data.splines[0].bezier_points[-1].select_control_point = True
+        
+        
+    def del_cutter_point(self, context):
+        if len(self.cutter.data.splines[0].bezier_points) > 1:
+            if not context.object :
+                context.view_layer.objects.active = self.cutter
+            bpy.ops.object.mode_set( mode="OBJECT")
+            bpy.ops.object.select_all(action="DESELECT")
+            self.cutter.select_set(True)
+            context.view_layer.objects.active = self.cutter
+            try:
+                bpy.ops.object.mode_set( mode="EDIT")
+                bpy.ops.curve.select_all( action="DESELECT")
+                bpy.ops.object.mode_set(mode='OBJECT')
+                self.cutter.data.splines[0].bezier_points[-1].select_control_point = True
+
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.curve.delete(type='VERT')  # Deletes selected points
+
+                bpy.ops.curve.select_all( action="SELECT")
+                bpy.ops.curve.handle_type_set( type="AUTOMATIC")
+                bpy.ops.curve.select_all( action="DESELECT")
+
+                bpy.ops.object.mode_set(mode='OBJECT')
+                self.cutter.data.splines[0].bezier_points[-1].select_control_point = True
+            except Exception as e:
+                bdental_log(["error delete curve point :", e])
+                pass
+
+    def modal(self, context, event):
+        
+        if not event.type in ["RET", "ESC", "LEFTMOUSE", "DEL"]:
+            return {"PASS_THROUGH"}
+        elif event.type == "RET" and self.counter == 0:
+            return {"PASS_THROUGH"}
+        elif event.type == "DEL" and self.counter == 0:
+            return {"PASS_THROUGH"}
+
+        elif event.type == "ESC":
+            if event.value == ("PRESS"):
+
+                for obj in bpy.data.objects:
+                    if not obj in self.start_objects:
+                        bpy.data.objects.remove(obj)
+                for col in bpy.data.collections:
+                    if not col in self.start_collections:
+                        bpy.data.collections.remove(col)
+
+                for obj in context.visible_objects:
+                    obj.hide_set(True)
+                for obj in self.start_visible_objects:
+                    try:
+                        obj.hide_set(False)
+                    except:
+                        pass
+
+                area3D, space3D , region_3d = CtxOverride(context)
+                with bpy.context.temp_override(area= area3D, space_data=space3D, region = region_3d):
+                    bpy.ops.wm.tool_set_by_id( name="builtin.select")
+                self.scn.tool_settings.use_snap = False
+                space3D.overlay.show_outline_selected = True
+
+                message = ["CANCELLED"]
+                BDENTAL_GpuDrawText(message)
+                sleep(2)
+                BDENTAL_GpuDrawText()
+                return {"CANCELLED"}
+
+        elif event.type == ("LEFTMOUSE") and self.counter == 1:
+            if event.value == ("PRESS"):
+                return {"PASS_THROUGH"}
+
+            if event.value == ("RELEASE"):
+                _is_valid = click_is_in_view3d(context, event)
+                #print(_is_valid)
+                if _is_valid :
+                    self.add_cutter_point(context)
+                    return {"RUNNING_MODAL"}
+                else :
+                    return {"PASS_THROUGH"}
+
+        elif event.type == ("LEFTMOUSE") and self.counter == 0:
+            
+            if event.value == ("PRESS"):
+                return {"PASS_THROUGH"}
+
+            if event.value == ("RELEASE"):
+                _is_valid = click_is_in_view3d(context, event)
+                #print(_is_valid)
+                if _is_valid :
+                    self.add_curve_cutter(context)
+                    self.counter += 1
+                    return {"RUNNING_MODAL"}
+                return {"PASS_THROUGH"}
+
+        elif event.type == ("DEL") and self.counter == 1:
+            if event.value == ("PRESS"):
+                self.del_cutter_point(context)
+                return {"RUNNING_MODAL"}
+
+        elif event.type == "RET" and self.counter == 1:
+
+            if event.value == ("PRESS"):
+                self.perform_cut_bvhtree(context)
+                return {"FINISHED"}
+
+        return {"RUNNING_MODAL"}
+
+    def invoke(self, context, event):
+        if context.space_data.type == "VIEW_3D":
+            self.base_mesh = context.object
+            
+
+            # return self.execute(context)
+            wm = context.window_manager
+            return wm.invoke_props_dialog(self, width=500)
+
+        else:
+
+            message = ["Active space must be a View3d"]
+            icon = "COLORSET_02_VEC"
+            bpy.ops.bdental.message_box(
+                "INVOKE_DEFAULT", message=str(message), icon=icon)
+            return {"CANCELLED"}
+
+    def execute(self, context):
+        self.scn = context.scene
+        self.counter = 0
+        self.start_objects = bpy.data.objects[:]
+        self.start_collections = bpy.data.collections[:]
+        self.start_visible_objects = bpy.context.visible_objects[:]
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+        self.base_mesh.select_set(True)
+        context.view_layer.objects.active = self.base_mesh
+
+        override, area3D, space3D, region3D = context_override(context)
+        with bpy.context.temp_override(**override):
+            bpy.ops.wm.tool_set_by_id( name="builtin.cursor")
+
+        context.window_manager.modal_handler_add(self)
+        txt = ["Mouse left : draw curve", "DEL : Roll back", "ESC : Cancell operation", "ENTER : Finalise"]
+        BDENTAL_GpuDrawText(txt)
+        return {"RUNNING_MODAL"}
+
+# class BDENTAL_OT_Text3d(bpy.types.Operator):
+#     """knif project 3d text on mesh"""
+
+#     bl_idname = "wm.bdental_text3d"
+#     bl_label = "Text 3D"
+#     bl_options = {"REGISTER", "UNDO"}
+
+#     text : StringProperty(
+#         name="Text",
+#         description="text content",
+#         default="Bdental",
+#     ) # type: ignore
+
+#     extrusion_value: FloatProperty(
+#         name="Text depth",
+#         description="Value for extrusion along the normal",
+#         default=-0.5,
+#         min=-10.0,
+#         max=10.0,
+#     ) # type: ignore
+
+#     @classmethod
+#     def poll(cls, context):
+
+#         base_mesh = context.object and context.object.select_get(
+#         ) and context.object.type == "MESH"
+#         return base_mesh
+    
+#     def modal(self, context, event):
+        
+#         if not event.type in ["RET", "ESC", "LEFTMOUSE", "DEL"]:
+#             return {"PASS_THROUGH"}
+#         elif event.type == "RET" and self.counter == 0:
+#             return {"PASS_THROUGH"}
+#         elif event.type == "DEL" and self.counter == 0:
+#             return {"PASS_THROUGH"}
+
+#         elif event.type == "ESC":
+#             if event.value == ("PRESS"):
+
+#                 for obj in bpy.data.objects:
+#                     if not obj in self.start_objects:
+#                         bpy.data.objects.remove(obj)
+#                 for col in bpy.data.collections:
+#                     if not col in self.start_collections:
+#                         bpy.data.collections.remove(col)
+
+#                 for obj in context.visible_objects:
+#                     obj.hide_set(True)
+#                 for obj in self.start_visible_objects:
+#                     try:
+#                         obj.hide_set(False)
+#                     except:
+#                         pass
+
+#                 area3D, space3D , region_3d = CtxOverride(context)
+#                 with bpy.context.temp_override(area= area3D, space_data=space3D, region = region_3d):
+#                     bpy.ops.wm.tool_set_by_id( name="builtin.select")
+#                 self.scn.tool_settings.use_snap = False
+#                 space3D.overlay.show_outline_selected = True
+
+#                 message = ["CANCELLED"]
+#                 BDENTAL_GpuDrawText(message)
+#                 sleep(2)
+#                 BDENTAL_GpuDrawText()
+#                 return {"CANCELLED"}
+
+#         elif event.type == ("LEFTMOUSE") and self.counter == 1:
+#             if event.value == ("PRESS"):
+#                 return {"PASS_THROUGH"}
+
+#             if event.value == ("RELEASE"):
+#                 _is_valid = click_is_in_view3d(context, event)
+#                 #print(_is_valid)
+#                 if _is_valid :
+#                     self.add_cutter_point(context)
+#                     return {"RUNNING_MODAL"}
+#                 else :
+#                     return {"PASS_THROUGH"}
+
+#         elif event.type == ("LEFTMOUSE") and self.counter == 0:
+            
+#             if event.value == ("PRESS"):
+#                 return {"PASS_THROUGH"}
+
+#             if event.value == ("RELEASE"):
+#                 _is_valid = click_is_in_view3d(context, event)
+#                 #print(_is_valid)
+#                 if _is_valid :
+#                     self.add_curve_cutter(context)
+#                     self.counter += 1
+#                     return {"RUNNING_MODAL"}
+#                 return {"PASS_THROUGH"}
+
+#         elif event.type == ("DEL") and self.counter == 1:
+#             if event.value == ("PRESS"):
+#                 self.del_cutter_point(context)
+#                 return {"RUNNING_MODAL"}
+
+#         elif event.type == "RET" and self.counter == 1:
+
+#             if event.value == ("PRESS"):
+#                 self.perform_cut(context)
+#                 return {"FINISHED"}
+
+#         return {"RUNNING_MODAL"}
+
+#     def invoke(self, context, event):
+#         if context.space_data.type == "VIEW_3D":
+#             self.base_mesh = context.object
+#             # return self.execute(context)
+#             wm = context.window_manager
+#             return wm.invoke_props_dialog(self, width=500)
+
+#         else:
+
+#             message = ["Active space must be a View3d"]
+#             icon = "COLORSET_02_VEC"
+#             bpy.ops.bdental.message_box(
+#                 "INVOKE_DEFAULT", message=str(message), icon=icon)
+#             return {"CANCELLED"}
+
+#     def execute(self, context):
+#         self.scn = context.scene
+#         self.counter = 0
+
+#         bpy.ops.object.mode_set(mode="OBJECT")
+#         bpy.ops.object.select_all(action="DESELECT")
+#         self.base_mesh.select_set(True)
+#         context.view_layer.objects.active = self.base_mesh
+
+#         override, area3D, space3D, region3D = context_override(context)
+#         with bpy.context.temp_override(**override):
+#             bpy.ops.wm.tool_set_by_id( name="builtin.cursor")
+
+#         context.window_manager.modal_handler_add(self)
+#         txt = ["Mouse left : draw curve", "DEL : Roll back", "ESC : Cancell operation", "ENTER : Finalise"]
+#         BDENTAL_GpuDrawText(txt)
+#         return {"RUNNING_MODAL"}
+    
+    
+
+
 
 
 #################################################################################################
@@ -12164,6 +13267,7 @@ classes = [
     BDENTAL_OT_AddAppTemplate,
 
     BDENTAL_OT_NewProject,
+    BDENTAL_OT_ReloadStartup,
     BDENTAL_OT_Dicom_Reader,
     BDENTAL_OT_VolumeSlicer,
     BDENTAL_OT_DicomToMesh,
@@ -12204,6 +13308,7 @@ classes = [
     BDENTAL_OT_SplintGuideGeom,
     BDENTAL_OT_guide_3d_text,
     
+    BDENTAL_OT_ConnectPathCutter,
     BDENTAL_OT_RibbonCutterAdd,
     BDENTAL_OT_RibbonCutter_Perform_Cut,
     BDENTAL_OT_CurveCutter1_New,
@@ -12243,6 +13348,7 @@ classes = [
     BDENTAL_OT_ImportMesh,
     BDENTAL_OT_ExportMesh,
     BDENTAL_OT_add_3d_text,
+    BDENTAL_OT_Text3d,
     BDENTAL_OT_NormalsToggle,
     BDENTAL_OT_FlipNormals,
     BDENTAL_OT_SlicesPointerSelect,
