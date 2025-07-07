@@ -88,10 +88,12 @@ class BdentalConstants():
     CONFIG_ZIP_NAME = "config.zip"
     STARTUP_FILE_NAME = "startup.blend"
 
-    ADDON_NAME = "Bdental45a"
+    ADDON_NAME = "Bdental45"
+    ADDON_RELEASE = "beta"
     
     ADDON_DIR = dirname(abspath(__file__))
     
+
     BLENDER_ROOT_PATH = dirname(dirname(dirname(ADDON_DIR)))
     RESOURCES = join(ADDON_DIR, "Resources")
     ADDON_VER_PATH = join(RESOURCES, ADDON_VER_NAME)
@@ -252,6 +254,10 @@ class BdentalConstants():
 
     LOCKED_TO_POINTER_MAT_NAME = "bdental_locked_to_pointer_mat"
     PREVIOUS_ACTIVE_MAT_NAME_TAG = "bdental_previous_mat"
+
+    SPLIT_CUTTER_HOOK_POINT = "split_cutter_hook_point"
+    CURVE_CUTTER1_TAG = "curvecutter1"
+    CURVE_CUTTER2_TAG = "curvecutter2"
 
 class TimerLogger:
     def __init__(self, label=""):

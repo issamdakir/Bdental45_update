@@ -1,5 +1,5 @@
 bl_info = {
-    "name": "Bdental-4.5",  
+    "name": "Bdental45",  
     "author": "Dr. Essaid Issam Dakir DMD\n,Dr. Ilya Fomenco DMD\n, Dr. Krasouski Dmitry DMD",
     "version": (4, 5, 0),
     "blender": (4, 5, 0),  
@@ -152,11 +152,11 @@ class BdentalAddonPreferences(bpy.types.AddonPreferences):
             layout = self.layout
             box = layout.box()
             row = box.row()
+            row.operator("wm.bdental_add_bdental_library", text="Add Bdental Library", icon="TOOL_SETTINGS")
+            row = box.row()
             row.operator("wm.bdental_add_app_template", text="Bdental as template",icon="SETTINGS")
             row = box.row()
             row.operator("wm.bdental_set_config", text="Bdental as default", icon="TOOL_SETTINGS")
-            row = box.row()
-            row.operator("wm.bdental_add_bdental_library", text="Add Bdental Library", icon="TOOL_SETTINGS")
             
 
 class BDENTAL_OT_checkUpdate(bpy.types.Operator):
@@ -233,7 +233,7 @@ class BDENTAL_PT_ModulesErrorPanel(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI" 
     bl_category = BdentalConstants.ADDON_NAME
-    bl_label = f"{BdentalConstants.ADDON_NAME} (ver. {BdentalConstants.ADDON_VER_DATE})"
+    bl_label = f"{BdentalConstants.ADDON_NAME}-{BdentalConstants.ADDON_RELEASE}, (ver. {BdentalConstants.ADDON_VER_DATE})"
 
     def draw(self, context):
         global remote_version

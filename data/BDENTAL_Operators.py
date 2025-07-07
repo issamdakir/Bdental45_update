@@ -33,7 +33,7 @@ from bpy.props import ( # type: ignore
 import SimpleITK as sitk # type: ignore
 # import itk # type: ignore
 import vtk # type: ignore
-import cv2 # type: ignore
+# import cv2 # type: ignore
 
 from vtk.util import numpy_support # type: ignore
 from vtk import vtkCommand # type: ignore
@@ -1812,28 +1812,41 @@ def update_slices(scene):
             direction_out,
             0,
         )
-
-        #############################################
-        # Write Image 1rst solution:
-        img_array = sitk.GetArrayFromImage(slice_img_scalars)
-        img_array = img_array.reshape(img_array.shape[1], img_array.shape[2])
-
-        image = np.flipud(img_array)
+        flipped_image = sitk.Flip(slice_img_scalars, [False,True, False])  # For 2D image: [X, Y]
         if scene.BDENTAL_Props.slicesColorThresholdBool:
+            image_array = sitk.GetArrayFromImage(flipped_image)
             threshold255 = HuTo255(props.ThresholdMin,BdentalConstants.WMIN,BdentalConstants.WMAX)
             if threshold255 == 0: threshold255+=1
             elif threshold255 == 255: threshold255-=1
             slice_threshold_rgba = threshold_rgba(
-                image,
+                image_array,
                 threshold255,
                 scene.BDENTAL_Props.SegmentColor,
                 BdentalConstants.SLICE_SEGMENT_COLOR_RATIO)
-            slice_threshold_rgba_norm = cv2.normalize(slice_threshold_rgba, None, alpha=0, beta=255,
-                            norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-            image = cv2.cvtColor(slice_threshold_rgba_norm, cv2.COLOR_RGBA2BGRA)
+            
+            flipped_image = sitk.GetImageFromArray(slice_threshold_rgba)
 
-        cv2.imwrite(img_path, image)
+        #############################################
+        # Write Image 1rst solution:
+        # img_array = sitk.GetArrayFromImage(slice_img_scalars)
+        # img_array = img_array.reshape(img_array.shape[1], img_array.shape[2])
 
+        # image = np.flipud(img_array)
+        # if scene.BDENTAL_Props.slicesColorThresholdBool:
+        #     threshold255 = HuTo255(props.ThresholdMin,BdentalConstants.WMIN,BdentalConstants.WMAX)
+        #     if threshold255 == 0: threshold255+=1
+        #     elif threshold255 == 255: threshold255-=1
+        #     slice_threshold_rgba = threshold_rgba(
+        #         image,
+        #         threshold255,
+        #         scene.BDENTAL_Props.SegmentColor,
+        #         BdentalConstants.SLICE_SEGMENT_COLOR_RATIO)
+        #     slice_threshold_rgba_norm = cv2.normalize(slice_threshold_rgba, None, alpha=0, beta=255,
+        #                     norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+        #     image = cv2.cvtColor(slice_threshold_rgba_norm, cv2.COLOR_RGBA2BGRA)
+
+        # cv2.imwrite(img_path, image)
+        sitk.WriteImage(flipped_image, img_path)
         #############################################
         # Update Blender Image data :
         blender_img_obj = bpy.data.images.get(img_name)
@@ -7851,7 +7864,7 @@ class BDENTAL_OT_RibbonCutterAdd(bpy.types.Operator):
         MoveToCollection(self.cutter, "Bdental Cutters")
 
     def add_cutter_point(self):
-
+        bpy.context.view_layer.objects.active = self.cutter
         bpy.ops.object.mode_set( mode="EDIT")
         bpy.ops.curve.extrude( mode="INIT")
         bpy.ops.view3d.snap_selected_to_cursor( use_offset=False)
@@ -7864,6 +7877,7 @@ class BDENTAL_OT_RibbonCutterAdd(bpy.types.Operator):
 
     def del_cutter_point(self):
         try:
+            bpy.context.view_layer.objects.active = self.cutter
             bpy.ops.object.mode_set( mode="EDIT")
             bpy.ops.curve.select_all( action="DESELECT")
             points = self.cutter.data.splines[0].bezier_points[:]
@@ -8468,7 +8482,9 @@ class BDENTAL_OT_CurveCutter1_New(bpy.types.Operator):
 
         base_mesh = context.object and context.object.select_get(
         ) and context.object.type == "MESH"
-        return base_mesh
+        if not base_mesh:
+            return False
+        return context.object.get(BdentalConstants.BDENTAL_TYPE_TAG) != BdentalConstants.CURVE_CUTTER1_TAG
 
     def add_curve_cutter(self, context):
         area3D, space3D , region_3d = CtxOverride(context)
@@ -8484,7 +8500,7 @@ class BDENTAL_OT_CurveCutter1_New(bpy.types.Operator):
             # Set cutting_tool name :
             self.cutter = bpy.context.view_layer.objects.active
             self.cutter.name = "BDENTAL_Cutter"
-            self.cutter[BdentalConstants.BDENTAL_TYPE_TAG] = "curvecutter1"
+            self.cutter[BdentalConstants.BDENTAL_TYPE_TAG] = BdentalConstants.CURVE_CUTTER1_TAG
             self.cutter["bdental_target"] = self.base_mesh.name
 
             # CurveCutter settings :
@@ -8528,7 +8544,7 @@ class BDENTAL_OT_CurveCutter1_New(bpy.types.Operator):
         MoveToCollection(self.cutter, "Bdental Cutters")
 
     def add_cutter_point(self):
-
+        bpy.context.view_layer.objects.active = self.cutter
         bpy.ops.object.mode_set( mode="EDIT")
         bpy.ops.curve.extrude( mode="INIT")
         bpy.ops.view3d.snap_selected_to_cursor( use_offset=False)
@@ -8541,6 +8557,7 @@ class BDENTAL_OT_CurveCutter1_New(bpy.types.Operator):
 
     def del_cutter_point(self):
         try:
+            bpy.context.view_layer.objects.active = self.cutter
             bpy.ops.object.mode_set( mode="EDIT")
             bpy.ops.curve.select_all( action="DESELECT")
             points = self.cutter.data.splines[0].bezier_points[:]
@@ -9129,7 +9146,9 @@ class BDENTAL_OT_CurveCutterAdd2(bpy.types.Operator):
 
         base_mesh = context.object and context.object.select_get(
         ) and context.object.type == "MESH"
-        return base_mesh
+        if not base_mesh:
+            return False
+        return context.object.get(BdentalConstants.BDENTAL_TYPE_TAG) not in [BdentalConstants.CURVE_CUTTER2_TAG, BdentalConstants.SPLIT_CUTTER_HOOK_POINT]
     
     def add_curve_cutter(self, context):
         area3D, space3D , region_3d = CtxOverride(context)
@@ -9232,6 +9251,8 @@ class BDENTAL_OT_CurveCutterAdd2(bpy.types.Operator):
         Hook=AddMarkupPoint(
             name=Name, color=(0, 1, 0, 1), loc=loc, Diameter=0.5, CollName=CollName
         )
+        Hook[BdentalConstants.BDENTAL_TYPE_TAG] = BdentalConstants.SPLIT_CUTTER_HOOK_POINT
+        
         bpy.context.view_layer.objects.active = Hook
         bpy.ops.object.mode_set(mode="OBJECT")
         bpy.ops.object.select_all(action="DESELECT")

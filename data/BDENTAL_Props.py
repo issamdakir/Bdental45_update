@@ -40,7 +40,7 @@ def on_threshold_min_update(self, context):
             if pcd_theshold:
                 threshold_255 = HuTo255(self.ThresholdMin)
                 pcd_theshold.integer = threshold_255
-                # print(f"pcd threshold updated = {pcd_theshold.integer}")
+                print(f"pcd threshold updated = {pcd_theshold.integer}")
                 # target.data.update()
 
         elif target.get(BdentalConstants.BDENTAL_TYPE_TAG) == BdentalConstants.VOXEL_OBJECT_TYPE :
