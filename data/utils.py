@@ -599,8 +599,15 @@ def addon_update_preinstall(update_root):
     update_data_map_dict = open_json(update_data_map_json)
     update_data_dir = join(update_root, "data")
     items = os.listdir(update_data_dir)
+    update_data_dict = {}
+    for i in items:
+        if update_data_map_dict.get(i):
+            update_data_dict.update({join(update_data_dir,i): join(BdentalConstants.ADDON_DIR,*update_data_map_dict.get(i))})
+        else :
+            bdental_log([f"Update data {i} not found in update map!"])
+            continue
     
-    update_data_dict = {join(update_data_dir,i) : join(BdentalConstants.ADDON_DIR,*update_data_map_dict.get(i)) for i in items}
+    # update_data_dict = {join(update_data_dir,i) : join(BdentalConstants.ADDON_DIR,*update_data_map_dict.get(i)) for i in items}
     for src,dst in update_data_dict.items():
         
         if BdentalConstants.BDENTAL_MODULES_NAME in src.lower() :
