@@ -42,6 +42,12 @@
         "Resources",
         "Bdental_Library_Archive"
     ],
+
+    "blender_assets.cats.txt": [
+        "Resources",
+        "Bdental_Library_Archive",
+        "blender_assets.cats.txt"
+    ],
     
     
     "bdental_app_template.zip": [
